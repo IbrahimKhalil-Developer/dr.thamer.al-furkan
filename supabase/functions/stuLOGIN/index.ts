@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.49.8";
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const SYSTEM_KEY = Deno.env.get('system_key') ?? ''; // ← من Supabase Secrets
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false }
@@ -9,10 +10,10 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// دالة مساعدة لعمل هاش SHA-256 للنص
+// دالة هاش SHA-256 تستخدم system_key
 async function hashOtp(input: string): Promise<string> {
   const encoder = new TextEncoder();
-  const data = encoder.encode(input + "IbrahimKhalil@Thamer@Hash.2026");
+  const data = encoder.encode(input + SYSTEM_KEY); // ← system_key بدل salt ثابت
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
@@ -143,10 +144,10 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: true, errors: 'المستخدم غير موجود' }), { status: 404 });
   }
 
-  // ── 7. تسجيل الدخول ──────────────────────────────────────────────
+  // ── 7. تسجيل الدخول باستخدام password + system_key ──────────────
   const { data: authSession, error: authError } = await supabaseAuth.auth.signInWithPassword({
     email: userAuthData.email,
-    password: userAuthData.password,
+    password: userAuthData.password + SYSTEM_KEY, // ← password + system_key
   });
 
   if (authError || !authSession.session) {
@@ -208,7 +209,7 @@ Deno.serve(async (req: Request) => {
       const { data: signedData, error: signedError } = await supabaseAdmin
         .storage
         .from(bucket)
-        .createSignedUrl(userAuthData.photo_url, 60); // 60 ثانية فقط
+        .createSignedUrl(userAuthData.photo_url, 60);
 
       if (!signedError && signedData?.signedUrl) {
         tempPhotoUrl = signedData.signedUrl;

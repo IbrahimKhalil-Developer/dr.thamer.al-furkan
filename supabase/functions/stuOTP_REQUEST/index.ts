@@ -21,6 +21,7 @@ Deno.serve(async (req) => {
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const wahaUrl = Deno.env.get('waha_url') ?? '';
   const wahaApiKey = Deno.env.get('waha_api_key') ?? '';
+  const systemKey = Deno.env.get('system_key') ?? ''; // ← من Supabase Secrets
 
   const supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
     global: { headers: { 'x-my-custom-header': 'generate-otp' } }
@@ -54,7 +55,7 @@ Deno.serve(async (req) => {
   const xForwardedFor = req.headers.get('x-forwarded-for');
   const clientIp = xForwardedFor ? xForwardedFor.split(',')[0].trim() : (req.headers.get('x-real-ip') || 'unknown');
 
-  // 3. جلب بيانات المستخدم (مع حقول الـ IP الثلاثة)
+  // 3. جلب بيانات المستخدم
   const { data: userData, error: userError } = await supabaseClient
     .from('users')
     .select('user_id, logined_ip, joined_ip, opened_ip')
@@ -89,11 +90,11 @@ Deno.serve(async (req) => {
   );
 
   // 6. حدود العدّ حسب الحالة
-  const ipLimit = ipMatchesUserKey ? 8 : 5;   // حد محاولات الـ IP خلال 24 ساعة
-  const userLimitForNonVerified = 3;          // حد محاولات الحساب خلال 24 ساعة (يُطبّق فقط إذا IP مختلف عن مفاتيح المستخدم)
-  const dailyVerifiedLimit = 10;              // حد يومي للسجلات الموثقة (otp_verified = true) لكل حساب ولكل IP
+  const ipLimit = ipMatchesUserKey ? 8 : 5;
+  const userLimitForNonVerified = 3;
+  const dailyVerifiedLimit = 10;
 
-  // 7. حساب عدد سجلات otp_verified = true اليومي لكل حساب (يُحتسب للحد 10)
+  // 7. حساب عدد سجلات otp_verified = true اليومي لكل حساب
   const { data: verifiedUserToday } = await supabaseClient
     .from('otps')
     .select('otp_id')
@@ -108,7 +109,7 @@ Deno.serve(async (req) => {
     }), { headers: { 'Content-Type': 'application/json' }, status: 429 });
   }
 
-  // 8. حساب عدد سجلات otp_verified = true اليومي لنفس الـ IP (يُحتسب للحد 10)
+  // 8. حساب عدد سجلات otp_verified = true اليومي لنفس الـ IP
   const { data: verifiedIpToday } = await supabaseClient
     .from('otps')
     .select('otp_id')
@@ -123,7 +124,7 @@ Deno.serve(async (req) => {
     }), { headers: { 'Content-Type': 'application/json' }, status: 429 });
   }
 
-  // 9. حساب محاولات الـ IP خلال 24 ساعة (نحسب السجلات غير الموثقة otp_verified = false)
+  // 9. حساب محاولات الـ IP خلال 24 ساعة
   const { data: ipOtpAttempts } = await supabaseClient
     .from('otps')
     .select('otp_id')
@@ -138,14 +139,11 @@ Deno.serve(async (req) => {
     }), { headers: { 'Content-Type': 'application/json' }, status: 429 });
   }
 
-  // 10. حساب محاولات الحساب خلال 24 ساعة (نحسب السجلات غير الموثقة otp_verified = false)
-  // إذا كان الـ IP مطابقًا لأيٍّ من مفاتيح المستخدم: لا تُحتسب هذه المحاولة ضمن عدّ الحساب (مستثناة)
-  // أما إذا كان مختلفًا: نطبق حد userLimitForNonVerified
+  // 10. حساب محاولات الحساب خلال 24 ساعة
   let excludedByUserIp = false;
   if (ipMatchesUserKey) {
     excludedByUserIp = true;
   } else {
-    // IP مختلف => نعد محاولات الحساب غير الموثقة خلال 24 ساعة (ونستثني السجلات التي وُسمت excluded_by_user_ip = true)
     const { data: userOtpAttempts } = await supabaseClient
       .from('otps')
       .select('otp_id')
@@ -162,8 +160,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  // 11. التحقق من آخر OTP لتطبيق مهلة الزمن بين الطلبات
-  // نأخذ آخر صف (الأحدث) بغض النظر عن الحالة
+  // 11. التحقق من آخر OTP لتطبيق مهلة الزمن
   const { data: lastOtpData } = await supabaseClient
     .from('otps')
     .select('otp_date')
@@ -176,7 +173,6 @@ Deno.serve(async (req) => {
     const otpDate = new Date(lastOtp.otp_date);
     const diffMinutes = (now.getTime() - otpDate.getTime()) / 1000 / 60;
 
-    // زمن الانتظار يعتمد على ما إذا كان الـ IP مطابقًا لمفاتيح المستخدم
     const waitMinutes = ipMatchesUserKey ? 2 : 3;
     const waitText = ipMatchesUserKey ? 'دقيقتان' : 'ثلاث دقائق';
 
@@ -191,15 +187,14 @@ Deno.serve(async (req) => {
   // 12. توليد رمز OTP من 5 أرقام
   const otp = Math.floor(10000 + Math.random() * 90000).toString();
 
-  // 13. عمل hash للـ OTP باستخدام Web Crypto API مع Salt ثابت
-  const salt = "IbrahimKhalil@Thamer@Hash.2026";
+  // 13. عمل hash للـ OTP باستخدام system_key من Secrets
   const encoder = new TextEncoder();
-  const hashInput = encoder.encode(otp + salt);
+  const hashInput = encoder.encode(otp + systemKey); // ← system_key بدل salt ثابت
   const hashBuffer = await crypto.subtle.digest("SHA-256", hashInput);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const otpHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-  // 14. إدراج السجل في جدول otps (نخزن otp_hash بدل النص، ونخزن otp_date و excluded_by_user_ip)
+  // 14. إدراج السجل في جدول otps
   const { data: newOtpData, error: newOtpError } = await supabaseClient
     .from('otps')
     .insert({
@@ -227,12 +222,11 @@ Deno.serve(async (req) => {
     });
   }
 
-  // 15. إرسال الرسالة عبر WAHA (نرسل الرمز الحقيقي للمستخدم)
+  // 15. إرسال الرسالة عبر WAHA
   const wahaText = `*${otp}* هو رمز التحقق الخاص بك. لأسباب أمنية، لا تشارك هذا الرمز مع أحد.`;
   await sendWahaMessage(wahaUrl, wahaApiKey, phone_number, wahaText);
 
   // 16. استجابة النجاح
-  // نُعيد حقل ex_by_ip ليبيّن ما إذا كانت المحاولة مستثناة من عدّ الحساب بسبب تطابق الـ IP
   return new Response(JSON.stringify({
     error: false,
     message: 'تم إرسال رمز التحقق بنجاح',

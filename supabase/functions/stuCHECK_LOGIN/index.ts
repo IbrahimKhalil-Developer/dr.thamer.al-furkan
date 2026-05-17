@@ -69,14 +69,14 @@ function calcExamInfo(examDateStr: string | null, examType: "جزئي" | "ترا
 
   const label = examType === "جزئي" ? "الجزئي" : "التراكمي";
 
-  if (diffDays === 0) {
-  return { exam_started: false, exam_time_text: `بعد غد يوم الإختبار ${label}` };
+  if (diffDays <= 0) {
+  return { exam_started: true, exam_time_text: "" };
 } else if (diffDays === 1) {
   return { exam_started: false, exam_time_text: `يوم غد الإختبار ${label}` };
-} else {
-  return { exam_started: true, exam_time_text: "" };
-  }
+} else if (diffDays === 2) {
+  return { exam_started: false, exam_time_text: `بعد غد يوم الإختبار ${label}` };
 }
+return { exam_started: false, exam_time_text: "" };
   
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {

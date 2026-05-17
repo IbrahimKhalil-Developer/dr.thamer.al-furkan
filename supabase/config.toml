@@ -5,16 +5,16 @@ port = 54321
 [functions.pages_system]
 verify_jwt = false
 
-[functions.stuCHECK_LOGIN]
+[functions.stucheck_login]
 verify_jwt = false
 
-[functions.stuCOMPLETE_PROFILE]
+[functions.stucomplete_profile]
 verify_jwt = false
 
-[functions.stuLOGIN]
+[functions.stulogin]
 verify_jwt = false
 
-[functions.stuOTP_REQUEST]
+[functions.stuotp_request]
 verify_jwt = false
 
 [functions.stuready]

@@ -77,7 +77,7 @@ function calcExamInfo(examDateStr: string | null, examType: "جزئي" | "ترا
   return { exam_started: false, exam_time_text: `بعد غد يوم الإختبار ${label}` };
 }
 return { exam_started: false, exam_time_text: "" };
-  
+}
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: true, errors: 'الطريقة غير مسموح بها' }), {

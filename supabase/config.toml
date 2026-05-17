@@ -1,21 +1,17 @@
-[api]
-enabled = true
-port = 54321
-
 [functions.pages_system]
 verify_jwt = false
 
-[functions.stucheck_login]
+[functions.stuCHECK_LOGIN]
 verify_jwt = false
 
-[functions.stucomplete_profile]
+[functions.stuCOMPLETE_PROFILE]
 verify_jwt = false
 
-[functions.stulogin]
+[functions.stuLOGIN]
 verify_jwt = false
 
-[functions.stuotp_request]
+[functions.stuOTP_REQUEST]
 verify_jwt = false
 
-[functions.stuready]
+[functions.stuREADY]
 verify_jwt = false

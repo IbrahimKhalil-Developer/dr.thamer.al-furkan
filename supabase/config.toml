@@ -1,0 +1,17 @@
+[functions.stuOTP_REQUEST]
+verify_jwt = false
+
+[functions.stuLOGIN]
+verify_jwt = false
+
+[functions.stuCHECK_LOGIN]
+verify_jwt = false
+
+[functions.stuREADY]
+verify_jwt = false
+
+[functions.stuCOMPLETE_PROFILE]
+verify_jwt = false
+
+[functions.pages_system]
+verify_jwt = false

@@ -17,5 +17,5 @@ verify_jwt = false
 [functions.stuOTP_REQUEST]
 verify_jwt = false
 
-[functions.stuREADY]
+[functions.stuready]
 verify_jwt = false

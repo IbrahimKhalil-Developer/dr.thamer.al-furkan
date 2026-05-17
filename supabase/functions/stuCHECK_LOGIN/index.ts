@@ -76,7 +76,7 @@ function calcExamInfo(examDateStr: string | null, examType: "جزئي" | "ترا
 } else {
   return { exam_started: true, exam_time_text: "" };
   }
-
+}
   
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {

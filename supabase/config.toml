@@ -1,3 +1,7 @@
+[api]
+enabled = true
+port = 54321
+
 [functions.stuOTP_REQUEST]
 verify_jwt = false
 

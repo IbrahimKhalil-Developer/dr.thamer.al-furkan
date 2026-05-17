@@ -9,7 +9,6 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// ── خوارزمية عرض الصفحة ──────────────────────────
 function buildPageDisplay(page: number, edp: number): string {
   if (edp < 1) {
     const start = Math.floor(page);
@@ -26,7 +25,6 @@ function buildPageDisplay(page: number, edp: number): string {
   }
 }
 
-// ── تنسيق الوقت بتوقيت بغداد (12 ساعة) ──────────────────────────────
 function formatTimeBaghdad(dateStr: string | null): string {
   if (!dateStr) return "";
   const date = new Date(dateStr);
@@ -40,29 +38,23 @@ function formatTimeBaghdad(dateStr: string | null): string {
   return `${hours}:${strMinutes}${ampm}`;
 }
 
-// ── التحقق من انتهاء الوقت (من 10:00 م إلى 11:45 م بتوقيت بغداد) ─────────────
 function checkTimeEndedBaghdad(): string {
   const now = new Date();
   const baghdadDate = new Date(now.getTime() + (3 * 60 * 60 * 1000));
   const hours = baghdadDate.getUTCHours();
   const minutes = baghdadDate.getUTCMinutes();
-  if (hours === 22 || (hours === 23 && minutes <= 45)) {
-    return "yes";
-  }
+  if (hours === 22 || (hours === 23 && minutes <= 45)) return "yes";
   return "no";
 }
 
-// ── تنسيق التاريخ YYYY-MM-DD ──────────────────────────────────────
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
   return dateStr.split('T')[0];
 }
 
-// ── حساب نص وقت الامتحان ──────────────────────────────────────────
-function calcExamTimeText(examDateStr: string | null, examType: "جزئي" | "تراكمي"): string {
-  if (!examDateStr) return "";
+function calcExamInfo(examDateStr: string | null, examType: "جزئي" | "تراكمي"): { exam_started: boolean; exam_time_text: string } {
+  if (!examDateStr) return { exam_started: false, exam_time_text: "" };
 
-  // تحويل التاريخين لتوقيت بغداد
   const now = new Date();
   const baghdadNow = new Date(now.getTime() + (3 * 60 * 60 * 1000));
   const todayStr = baghdadNow.toISOString().split('T')[0];
@@ -71,14 +63,21 @@ function calcExamTimeText(examDateStr: string | null, examType: "جزئي" | "ت
   const baghdadExam = new Date(examDate.getTime() + (3 * 60 * 60 * 1000));
   const examStr = baghdadExam.toISOString().split('T')[0];
 
-  // حساب الفرق بالأيام
   const todayMs = new Date(todayStr).getTime();
   const examMs = new Date(examStr).getTime();
   const diffDays = Math.round((examMs - todayMs) / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 1) return `يوم غد الإختبار ${examType === "جزئي" ? "الجزئي" : "التراكمي"}`;
-  if (diffDays === 2) return `بعد غد يوم الإختبار ${examType === "جزئي" ? "الجزئي" : "التراكمي"}`;
-  return "";
+  const label = examType === "جزئي" ? "الجزئي" : "التراكمي";
+
+  if (diffDays <= 0) {
+    return { exam_started: true, exam_time_text: "" };
+  } else if (diffDays === 1) {
+    return { exam_started: false, exam_time_text: `يوم غد الإختبار ${label}` };
+  } else if (diffDays === 2) {
+    return { exam_started: false, exam_time_text: `بعد غد يوم الإختبار ${label}` };
+  }
+
+  return { exam_started: false, exam_time_text: "" };
 }
 
 Deno.serve(async (req: Request) => {
@@ -132,7 +131,7 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: true, errors: 'أنتهت الجلسة يرجى تسجيل الدخول مرة أخُرى' }), { status: 401 });
   }
 
-  // ── 2. جلب بيانات المستخدم الأساسية ──────────────────────────────
+  // ── 2. جلب بيانات المستخدم ──────────────────────────────────────
   const { data: userAuthData, error: userAuthError } = await supabaseAdmin
     .from('users')
     .select('*')
@@ -148,7 +147,7 @@ Deno.serve(async (req: Request) => {
     .update({ last_opened_in: now.toISOString(), opened_ip: clientIp })
     .eq('user_id', userId);
 
-  // ── 3. جلب البيانات من الجداول المطلوبة ──────────────────────────
+  // ── 3. جلب البيانات ──────────────────────────────────────────────
   const { data: userSaves } = await supabaseAdmin
     .from('users_saves')
     .select('*')
@@ -167,7 +166,7 @@ Deno.serve(async (req: Request) => {
     .eq('user_id', userId)
     .order('id', { ascending: true });
 
-  // ── 4. معالجة وتنسيق البيانات للرد ───────────────────────────────
+  // ── 4. معالجة البيانات ───────────────────────────────────────────
   const processedPages = (userPagesRaw || []).map(p => {
     const { teacher_photo, is_45min_requested, ...rest } = p;
     const save = (userSaves || []).find(s => s.id === p.save_id);
@@ -193,7 +192,7 @@ Deno.serve(async (req: Request) => {
     };
   });
 
-  // ── 5. تجهيز قسم information ────────────────────────────────────
+  // ── 5. information ───────────────────────────────────────────────
   let infoStatus = "";
   let infoSaveText = "";
   let infoExamStatus = "";
@@ -207,7 +206,8 @@ Deno.serve(async (req: Request) => {
   let examTimeText = "";
 
   const currentSaveId = userAuthData.save_id;
-  const currentSave = (userSaves || []).find(s => s.id === currentSaveId) || (userSaves && userSaves.length > 0 ? userSaves[userSaves.length - 1] : null);
+  const currentSave = (userSaves || []).find(s => s.id === currentSaveId)
+    || (userSaves && userSaves.length > 0 ? userSaves[userSaves.length - 1] : null);
 
   if (currentSave) {
     const status = currentSave.status;
@@ -251,36 +251,36 @@ Deno.serve(async (req: Request) => {
     } else if (status === "IN_EXAM1") {
       infoStatus = status;
 
-      // هل بدأ الامتحان؟
-      const exam1Row = (userTestsRaw || [])
-        .find(t => t.save_id === currentSave.id && t.type === "EXAM1");
+      // ── آخر صف لـ EXAM1 ← تصحيح الخطأ ──
+      lastRowForInfo = (userTestsRaw || [])
+        .filter(t => t.save_id === currentSave.id && t.type === "EXAM1")
+        .sort((a, b) => b.id - a.id)[0];
 
-      if (exam1Row) {
-        examStarted = true;
-        examTimeText = "";
-        lastRowForInfo = exam1Row;
-        infoExamStatus = exam1Row.status;
-      } else {
-        examStarted = false;
-        examTimeText = calcExamTimeText(currentSave.exam1_date, "جزئي");
+      if (lastRowForInfo) {
+        infoExamStatus = lastRowForInfo.status;
       }
+
+      // ── exam_started و exam_time_text من exam1_date ──
+      const examInfo = calcExamInfo(currentSave.exam1_date, "جزئي");
+      examStarted = examInfo.exam_started;
+      examTimeText = examInfo.exam_time_text;
 
     } else if (status === "IN_EXAM2") {
       infoStatus = status;
 
-      // هل بدأ الامتحان؟
-      const exam2Row = (userTestsRaw || [])
-        .find(t => t.save_id === currentSave.id && t.type === "EXAM2");
+      // ── آخر صف لـ EXAM2 ← تصحيح الخطأ ──
+      lastRowForInfo = (userTestsRaw || [])
+        .filter(t => t.save_id === currentSave.id && t.type === "EXAM2")
+        .sort((a, b) => b.id - a.id)[0];
 
-      if (exam2Row) {
-        examStarted = true;
-        examTimeText = "";
-        lastRowForInfo = exam2Row;
-        infoExamStatus = exam2Row.status;
-      } else {
-        examStarted = false;
-        examTimeText = calcExamTimeText(currentSave.exam2_date, "تراكمي");
+      if (lastRowForInfo) {
+        infoExamStatus = lastRowForInfo.status;
       }
+
+      // ── exam_started و exam_time_text من exam2_date ──
+      const examInfo = calcExamInfo(currentSave.exam2_date, "تراكمي");
+      examStarted = examInfo.exam_started;
+      examTimeText = examInfo.exam_time_text;
 
     } else if (["FINISHED", "TERMINATED", "SUSPENDED"].includes(status)) {
       infoStatus = status;
@@ -293,7 +293,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // ── 6. بناء الرد النهائي ────────────────────────────────────────
+  // ── 6. بناء الرد ─────────────────────────────────────────────────
   const responsePayload: any = {
     error: false,
     account: {

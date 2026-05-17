@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.8";
 
 // ════════════════════════════════════════════════════════════════════
-//  ثوابت النصوص الثابتة
+//  ثوابت النصوص الأساسية والتذييل المشترك
 // ════════════════════════════════════════════════════════════════════
 const T = {
   HEADER : "📖 *مشروع التحفيظ الدائم*\n",
@@ -13,7 +13,7 @@ const T = {
 };
 
 // ════════════════════════════════════════════════════════════════════
-//  قاموس التأنيث / التذكير الشامل والدقيق لغوياً
+//  قاموس التذكير والتأنيث والمسميات الرسمية المعدلة
 // ════════════════════════════════════════════════════════════════════
 const G = {
   student   : (f: boolean) => f ? "الطالبة" : "الطالب",
@@ -31,52 +31,30 @@ const G = {
   testHim   : (f: boolean) => f ? "واختبارها" : "واختباره",
   testHimHer: (f: boolean) => f ? "اختبارها" : "اختباره",
   forHer    : (f: boolean) => f ? "أمرها" : "أمره",
-  himGuard  : (f: boolean) => f ? "منها" : "منه",
-  readySt   : (f: boolean) => f ? "مستعدة" : "مستعد",
+  finished  : (f: boolean) => f ? "أمت" : "أتم",
+  absent    : (f: boolean) => f ? "غائبةٌ" : "غائبٌ",
   willTest  : (f: boolean) => f ? "ستُختبرين" : "ستُختبر",
   willTest3 : (f: boolean) => f ? "ستُختبر" : "سيُختبر",
-  passedV   : (f: boolean) => f ? "اجتازت" : "اجتاز",
-  resumedV  : (f: boolean) => f ? "استأنفت" : "استأنف",
-  passedExam: (f: boolean) => f ? "أجزتِ" : "أجزتَ",
-  finished  : (f: boolean) => f ? "أتمت" : "أتم",
-  absent    : (f: boolean) => f ? "غائبةٌ" : "غائبٌ",
-  onHoliday : (f: boolean) => f ? "مجازةٌ" : "مجازٌ",
-  teacherHol: (f: boolean) => f ? "المشرفةُ مجازةٌ" : "المشرفُ مجازٌ",
-  perfect   : (f: boolean) => f ? "مُتقنةٌ" : "مُتقنٌ",
-  good      : () => "إمتياز",
-  notEval   : () => "لم يتم التقييم",
 
-  iElmak    : (tF: boolean) => tF ? "إعلامكِ" : "إعلامكَ",
-  bless     : (tF: boolean) => tF ? "جزاكِ الله خيرًا" : "جزاكَ الله خيرًا",
-  supAdj    : (tF: boolean) => tF ? "الخاصة" : "الخاص",
-  supPrn    : (sF: boolean) => sF ? "بها" : "به",
-  assigned  : (tF: boolean) => tF ? "تم تكليفكِ" : "تم تكليفكَ",
-  byTeacher : (tF: boolean) => tF ? "قِبَلكِ" : "قِبَلكَ",
-  callWithYou: (tF: boolean) => tF ? "معكِ" : "معكَ",
-  yTeach    : (tF: boolean) => tF ? "وأنتِ" : "وأنتَ",
-  fromYou   : (tF: boolean) => tF ? "منكِ" : "منكَ",
-  mukalaf   : (tF: boolean) => tF ? "مكلفةٌ" : "مكلفٌ",
-  yourEffort: (tF: boolean) => tF ? "جهودكِ" : "جهودكَ",
-  anotherTeacher: (tF: boolean) => tF ? "مشرفة أخرى" : "مشرف آخر",
+  // مسميات الاختبارات الرسمية الجديدة
+  exam1Name : "الإختبار الجزئي",
+  exam2Name : "الإختبار التراكمي",
 
-  rejectDay : (tomorrow: boolean) => `رسوبٌ — يُعاد التسميع ${tomorrow ? "بعد غدٍ" : "ليوم غدٍ"}`,
-  rejectDayExam: (tomorrow: boolean) => `رسوبٌ — يُعاد الاختبار ${tomorrow ? "بعد غدٍ" : "ليوم غدٍ"}`,
-
-  supNoteP: (tF: boolean, sF: boolean) => {
-    const l = tF ? (sF ? "المشرفةُ الخاصة بكِ مجازةٌ ليوم غدٍ" : "المشرفةُ الخاصة بكَ مجازةٌ ليوم غدٍ")
-                 : (sF ? "المشرفُ الخاص بكِ مجازٌ ليوم غدٍ" : "المشرفُ الخاص بكَ مجازٌ ليوم غدٍ");
-    return `_(${l} — يُؤجَّل الحفظ إلى ما بعد الغد)_`;
+  formatCountStudent: (cnt: number): string => {
+    if (cnt === 0) return "لا يوجد";
+    if (cnt === 1) return "طالب واحد";
+    if (cnt === 2) return "طالبين";
+    if (cnt >= 3 && cnt <= 10) return `${cnt} طلاب`;
+    return `${cnt} طالب`;
   },
-  userHolNoteP: (sF: boolean) => sF ? "_(أنتِ مجازةٌ ليوم غدٍ — يُؤجَّل الحفظ إلى ما بعد الغد)_" : "_(أنتَ مجازٌ ليوم غدٍ — يُؤجَّل الحفظ إلى ما بعد الغد)_",
-  pubNoteP: () => "_(يوم غدٍ إجازةٌ عامة — يُؤجَّل الموعد إلى ما بعد الغد 🌙)_",
 
-  supNoteE: (tF: boolean, sF: boolean) => {
-    const l = tF ? (sF ? "المشرفةُ المسؤولة عن اختبارِكِ مجازةٌ ليوم غدٍ" : "المشرفةُ المسؤولة عن اختبارِكَ مجازةٌ ليوم غدٍ")
-                 : (sF ? "المشرفُ المسؤول عن اختبارِكِ مجازٌ ليوم غدٍ" : "المشرفُ المسؤول عن اختبارِكَ مجازٌ ليوم غدٍ");
-    return `_(${l} — يُؤجَّل الاختبار إلى ما بعد الغد)_`;
-  },
-  userHolNoteE: (sF: boolean) => sF ? "_(أنتِ مجازةٌ ليوم غدٍ — يُؤجَّل الاختبار إلى ما بعد الغد)_" : "_(أنتَ مجازٌ ليوم غدٍ — يُؤجَّل الاختبار إلى ما بعد الغد)_",
-  pubNoteE: () => "_(يوم غدٍ إجازةٌ عامة — يُؤجَّل الاختبار إلى ما بعد الغد 🌙)_",
+  formatCountTeacher: (cnt: number): string => {
+    if (cnt === 0) return "لا يوجد";
+    if (cnt === 1) return "مشرف واحد";
+    if (cnt === 2) return "مشرفين";
+    if (cnt >= 3 && cnt <= 10) return `${cnt} مشرفين`;
+    return `${cnt} مشرف`;
+  }
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -95,27 +73,14 @@ interface HolidayInfo {
   userIsFemale      : boolean;
 }
 
-interface AbsenceData {
-  total            : number;
-  last_check       : number | null;
-  last_stopped_at  : string | null;
-  stopped_abs_total: number;
+interface LogEntry {
+  studentName : string;
+  typeLabel   : string; // الحفظ اليومي ، الإختبار الجزئي ، الإختبار التراكمي
+  resultLabel : string; // إتقان ، إمتياز ، رسوب ، غياب ، مشرف غائب ، إجازة خاصة ، اجازة عامة ، المشرف مجاز
 }
-
-interface TripleResult {
-  isTriple : boolean;
-  dates    : string[];
-}
-
-type SaveStatus  = "ACTIVE" | "SUSPENDED" | "TERMINATED" | "FINISHED" | "IN_EXAM1" | "IN_EXAM2";
-type StopVariant = "absence" | "reject";
-type ExamType    = "EXAM1" | "EXAM2";
-type StopTarget  = "student" | "father" | "teacher" | "admin";
-type PageVariant = "absence" | "holiday" | "teacher_holiday" | "public_holiday" | "teacher_absence";
-type ExamVariant = "teacher_absence" | "user_absence" | "reject";
 
 // ════════════════════════════════════════════════════════════════════
-//  دوال مساعدة عامة والتعامل مع توقيت بغداد
+//  دوال الوقت والتواريخ (توقيت بغداد الصارم)
 // ════════════════════════════════════════════════════════════════════
 function todayStr(): string {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Baghdad" }))
@@ -139,63 +104,24 @@ function convertPhone(p: string): string {
   return s;
 }
 
-function parseAbsence(raw: any): AbsenceData {
-  if (typeof raw === "number") return { total: raw, last_check: null, last_stopped_at: null, stopped_abs_total: 0 };
-  if (typeof raw === "object" && raw !== null) {
-    return {
-      total:             Number(raw.total             ?? 0),
-      last_check:        raw.last_check      != null ? Number(raw.last_check)      : null,
-      last_stopped_at:   raw.last_stopped_at != null ? String(raw.last_stopped_at) : null,
-      stopped_abs_total: Number(raw.stopped_abs_total ?? 0),
-    };
-  }
-  return { total: 0, last_check: null, last_stopped_at: null, stopped_abs_total: 0 };
-}
-
-function holNoteP(hi: HolidayInfo): string {
-  if (!hi.tomorrowIsHoliday) return "";
-  if (hi.type === "public")  return G.pubNoteP();
-  if (hi.type === "teacher") return G.supNoteP(hi.teacherIsFemale, hi.userIsFemale);
-  if (hi.type === "user")    return G.userHolNoteP(hi.userIsFemale);
-  return "";
-}
-
-function holNoteE(hi: HolidayInfo): string {
-  if (!hi.tomorrowIsHoliday) return "";
-  if (hi.type === "public")  return G.pubNoteE();
-  if (hi.type === "teacher") return G.supNoteE(hi.teacherIsFemale, hi.userIsFemale);
-  if (hi.type === "user")    return G.userHolNoteE(hi.userIsFemale);
-  return "";
-}
-
-function untilDate(base: string, shift: boolean): string {
-  return addDays(base, 1 + (shift ? 1 : 0));
-}
-
-function hdr(label: string, name: string): string[] {
-  return [T.HEADER, ``, `👤 ${label}: *${name}*`, ``];
-}
-
-function buildPageDisplay(page: number, edp: number): string {
-  const count = edp < 1 ? 1 : Math.ceil(edp);
-  return Array.from({ length: count }, (_, i) => String(page - (count - 1 - i))).join(" و ");
-}
-
-async function getPageNames(supabase: any, page: number, edp: number): Promise<string> {
+// ════════════════════════════════════════════════════════════════════
+//  نظام المحاكاة والارسال للرسائل و قنوات الاتصال
+// ════════════════════════════════════════════════════════════════════
+async function sendNotificationLog(supabase: any, phone: string, text: string) {
   try {
-    const count = edp < 1 ? 1 : Math.ceil(edp);
-    const pages = Array.from({ length: count }, (_, i) => page - (count - 1 - i));
-    const { data } = await supabase.from("quran_index").select("page_number, page_name").in("page_number", pages);
-    const map: Record<number, string> = {};
-    for (const r of data ?? []) map[r.page_number] = r.page_name;
-    return [...new Set(pages.map(p => map[p] ?? String(p)))].join(" & ");
-  } catch {
-    return String(page);
+    if (!phone) return;
+    await supabase.from("notification_logs").insert([{
+      phone_number: convertPhone(phone),
+      message_text: text,
+      sent_at: new Date().toISOString()
+    }]);
+  } catch (e) {
+    console.error("[NOTIFICATION LOG ERROR]:", e);
   }
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  نظام الإجازات وفحص الغياب/الرسوب المتتالي والإيقاف
+//  بناء وفحص الإجازات والتعطيل والغيابات المتتالية
 // ════════════════════════════════════════════════════════════════════
 async function buildHolidayContext(supabase: any, holidays: any[]): Promise<HolidayContext> {
   const ctx: HolidayContext = { isPublicHoliday: false, teacherHolidayMap: new Map(), userHolidaySet: new Set() };
@@ -212,352 +138,222 @@ async function buildHolidayContext(supabase: any, holidays: any[]): Promise<Holi
   return ctx;
 }
 
-function computeNewPageStatus(uid: string, tid: string, inTest: boolean, ctx: HolidayContext): string {
-  if (inTest) return "in_test";
+function computeNewRowStatus(uid: string, tid: string, ctx: HolidayContext): string {
   if (ctx.userHolidaySet.has(uid))    return "holiday";
   if (ctx.teacherHolidayMap.has(tid)) return "teacher_holiday";
   if (ctx.isPublicHoliday)            return "public_holiday";
   return "not_ready";
 }
 
-function computeHolidayInfo(uid: string, tid: string, isFU: boolean, iFT: boolean, ctx: HolidayContext): HolidayInfo {
-  const b: HolidayInfo = { tomorrowIsHoliday: false, type: "none", teacherIsFemale: iFT, userIsFemale: isFU };
-  if (ctx.userHolidaySet.has(uid))    return { ...b, tomorrowIsHoliday: true, type: "user" };
-  if (ctx.teacherHolidayMap.has(tid)) return { ...b, tomorrowIsHoliday: true, type: "teacher" };
-  if (ctx.isPublicHoliday)            return { ...b, tomorrowIsHoliday: true, type: "public" };
-  return b;
-}
-
-const SKIP_ST = new Set([ "holiday", "public_holiday", "teacher_holiday", "in_test", "user_absence", "teacher_absence", "sus_to_act" ]);
-
-async function checkTriple(
-  supabase: any, userId: string, saveId: string, table: "users_pages" | "users_pages_tests", kind: "absence" | "reject", examType?: ExamType
-): Promise<TripleResult> {
+async function checkTripleSequence(
+  supabase: any, userId: string, saveId: string, table: "users_pages" | "users_pages_tests", kind: "absence" | "reject", examType?: "EXAM1" | "EXAM2"
+): Promise<{ isTriple: boolean; dates: string[] }> {
   let q = supabase.from(table).select("status, page_status, date")
     .eq("user_id", userId).eq("save_id", saveId)
-    .order("id", { ascending: false }).limit(60);
+    .order("id", { ascending: false }).limit(40);
   
   if (examType) q = q.eq("type", examType);
   const { data } = await q;
   if (!data?.length) return { isTriple: false, dates: [] };
 
-  let cnt = 0;
+  let count = 0;
   const dates: string[] = [];
+  const SKIP_STATES = new Set(["holiday", "public_holiday", "teacher_holiday", "teacher_absence", "sus_to_act"]);
+
   for (const r of data) {
     const st = String(r.status ?? "");
     const pst = String(r.page_status ?? "");
 
-    if (SKIP_ST.has(st) && st !== "user_absence") continue;
+    if (SKIP_STATES.has(st) && st !== "user_absence") continue;
     if (st === "sus_to_act") break;
-    if (st === "finished" && (pst === "good" || pst === "perfect")) break;
 
     if (kind === "reject" && st === "finished" && pst === "reject") {
-      cnt++;
+      count++;
       dates.push(String(r.date ?? "").split("T")[0]);
-      if (cnt >= 3) return { isTriple: true, dates };
+      if (count >= 3) return { isTriple: true, dates };
       continue;
     }
     if (kind === "absence" && st === "user_absence") {
-      cnt++;
+      count++;
       dates.push(String(r.date ?? "").split("T")[0]);
-      if (cnt >= 3) return { isTriple: true, dates };
+      if (count >= 3) return { isTriple: true, dates };
       continue;
     }
-    if (SKIP_ST.has(st)) continue;
-    break;
+    if (st === "finished" && (pst === "good" || pst === "perfect")) break;
   }
   return { isTriple: false, dates };
 }
 
-async function suspendSave(
-  supabase: any, saveId: string, kind: StopVariant, dates: string[], saveName: string, currentStatus: string, isExam = false
-): Promise<void> {
-  const ctx = isExam ? `لاختبار الحفظ (${saveName})` : "";
-  const reason = kind === "absence"
-    ? [`الغياب لثلاثة أيام ${ctx}`, `الغياب الأول: ${dates[0] ?? "—"}`, `الغياب الثاني: ${dates[1] ?? "—"}`, `الغياب الثالث: ${dates[2] ?? "—"}`].join("\n")
-    : [`الرسوب لثلاث مرات متتالية ${ctx}:`, `الرسوب الأول: ${dates[0] ?? "—"}`, `الرسوب الثاني: ${dates[1] ?? "—"}`, `الرسوب الثالث: ${dates[2] ?? "—"}`].join("\n");
-
-  const upd: any = { status: "SUSPENDED", old_status: currentStatus, status_reason: reason };
-  if (isExam) {
-    const eType = currentStatus === "IN_EXAM1" ? "EXAM1" : "EXAM2";
-    if (eType === "EXAM1") {
-      upd.exam1_status = "SUSPENDED";
-      upd.exam1_status_page = "SUSPENDED";
-    } else {
-      upd.exam2_status = "SUSPENDED";
-      upd.exam2_status_page = "SUSPENDED";
-    }
-  }
-  await supabase.from("users_saves").update(upd).eq("id", saveId);
-}
-
 // ════════════════════════════════════════════════════════════════════
-//  دوال إنشاء الصفوف في قاعدة البيانات
+//  دوال صياغة رسائل المتابعة اليومية الفردية (بدون القرآن الكريم)
 // ════════════════════════════════════════════════════════════════════
-async function createPageRow(
-  supabase: any, userId: string, saveId: string, teacherId: string, teacherName: string, teacherPhoto: string, page: number, edp: number, fields: Record<string, any>
-): Promise<boolean> {
-  try {
-    const pageName = await getPageNames(supabase, page, edp);
-    const { data, error } = await supabase.from("users_pages").insert([{
-      user_id: userId, save_id: saveId, teacher_id: teacherId, teacher_name: teacherName, teacher_photo: teacherPhoto,
-      status: "not_ready", page_status: "not_ready", errors_number: { sowad: 0, nisyan: 0 },
-      created_at: new Date().toISOString(), page, page_name: pageName, ...fields,
-    }]).select("*");
-    if (error) { console.error("[PAGE INSERT ERROR]:", JSON.stringify(error)); return false; }
-    return data && data.length > 0;
-  } catch (e) { console.error("[PAGE INSERT EXCEPTION]:", e); return false; }
+function buildHeader(label: string, name: string): string {
+  return `${T.HEADER}\n👤 ${label}: *${name}*\n`;
 }
 
-async function createTestRow(
-  supabase: any, userId: string, saveId: string, examTId: string, examTName: string, examType: ExamType, startPage: number, endPage: number, fields: Record<string, any>
-): Promise<boolean> {
-  try {
-    const { data, error } = await supabase.from("users_pages_tests").insert([{
-      user_id: userId, save_id: saveId, teacher_id: examTId, teacher_name: examTName,
-      status: "not_ready", page_status: "not_ready", errors_number: { sowad: 0, nisyan: 0 },
-      type: examType, start_page: startPage, end_page: endPage, created_at: new Date().toISOString(), date: todayStr(), ...fields,
-    }]).select("*");
-    if (error) { console.error("[TEST ROW INSERT ERROR]:", JSON.stringify(error)); return false; }
-    return data && data.length > 0;
-  } catch (e) { console.error("[TEST ROW INSERT EXCEPTION]:", e); return false; }
-}
-
-async function updateTeacherAbsence(supabase: any, teacherId: string, dateVal: string, userName: string) {
-  try {
-    const { data: t } = await supabase.from("teachers").select("absence").eq("teacher_id", teacherId).maybeSingle();
-    let aj: any = t?.absence ?? {};
-    if (typeof aj === "string") { try { aj = JSON.parse(aj); } catch { aj = {}; } }
-    const dk = String(dateVal ?? todayStr()).split("T")[0];
-    if (!aj[dk]) aj[dk] = { users_names: userName };
-    else {
-      const n = aj[dk].users_names ?? "";
-      aj[dk].users_names = n ? `${n}, ${userName}` : userName;
-    }
-    await supabase.from("teachers").update({ absence: aj }).eq("teacher_id", teacherId);
-  } catch (e) { console.error(`[updateTeacherAbsence ERROR]:`, e); }
-}
-
-async function updateSaveExamFields(supabase: any, saveId: string, examType: ExamType, status: string, statusPage: string) {
-  const upd: Record<string, string> = {};
-  if (examType === "EXAM1") {
-    upd.exam1_status = status;
-    upd.exam1_status_page = statusPage;
-  } else {
-    upd.exam2_status = status;
-    upd.exam2_status_page = statusPage;
-  }
-  await supabase.from("users_saves").update(upd).eq("id", saveId);
-}
-
-// ════════════════════════════════════════════════════════════════════
-//  صياغة نصوص رسائل الحفظ اليومي والاكتمال والاختبارات
-// ════════════════════════════════════════════════════════════════════
-function msgAbsence(
-  saveName: string, pageDisp: string, dateStr: string, untilStr: string, absCount: number, isFU: boolean, iFT: boolean, forFather: boolean, variant: PageVariant, hi: HolidayInfo, fullName: string
-): string {
+function msgDailyAbsence(saveName: string, pageDisp: string, dateStr: string, untilStr: string, isFU: boolean, forFather: boolean, variant: string): string {
   const nameLbl = forFather ? G.guardian(isFU) : G.student(isFU);
-  let sLbl: string; let sEmoji: string;
-  if (variant === "absence") { sLbl = G.absent(isFU); sEmoji = "🔴"; }
-  else if (variant === "holiday") { sLbl = G.onHoliday(isFU); sEmoji = "🟡"; }
-  else if (variant === "teacher_holiday") { sLbl = G.teacherHol(iFT); sEmoji = "🟡"; }
-  else if (variant === "public_holiday") { sLbl = "إجازةٌ عامة"; sEmoji = "🟢"; }
-  else { sLbl = G.notEval(); sEmoji = "🔔"; }
+  let statusText = "غياب";
+  let emoji = "🔴";
+  if (variant === "holiday") { statusText = "إجازة خاصة"; emoji = "🟡"; }
+  else if (variant === "teacher_holiday") { statusText = "المشرف مجاز"; emoji = "🟡"; }
+  else if (variant === "public_holiday") { statusText = "اجازة عامة"; emoji = "🟢"; }
 
-  const lines = [
-    ...hdr(nameLbl, fullName), T.SEP,
-    `📚 الحفظ: *${saveName}*`,
-    `📄 الصفحة: *${pageDisp}*`,
-    `${sEmoji} الحالة: *${sLbl}*`,
-    `📅 النتيجة: *يُؤجَّل الحفظ من ${dateStr} إلى ${untilStr}*`,
-  ];
-  const note = holNoteP(hi);
-  if (note) lines.push(note);
-  if (variant === "absence") lines.push(`🔢 عدد الغيابات: *${absCount}*`);
-  lines.push(T.SEP, ``, T.FOOTER);
-  return lines.join("\n");
-}
-
-function msgFinished(
-  saveName: string, pageDisp: string, ps: string, errors: any, nextPagesText: string, isFU: boolean, iFT: boolean, forFather: boolean, inTest: boolean, hi: HolidayInfo, fullName: string
-): string {
-  const nameLbl = forFather ? G.guardian(isFU) : G.student(isFU);
-  let rLbl: string; let rEmoji: string;
-  if (ps === "perfect") { rLbl = G.perfect(isFU); rEmoji = "🌟"; }
-  else if (ps === "good") { rLbl = G.good(); rEmoji = "✅"; }
-  else { rLbl = G.rejectDay(hi.tomorrowIsHoliday); rEmoji = "❌"; }
-
-  const note = holNoteP(hi);
-  const lines = [
-    ...hdr(nameLbl, fullName), T.SEP,
-    `📚 الحفظ: *${saveName}*`,
-    `📄 الصفحة: *${pageDisp}*`,
-    `🔖 الحالة: *تم التقييم*`,
-    `${rEmoji} النتيجة: *${rLbl}*`, T.SEP,
-    `🔴 أخطاء السواد: *${errors?.sowad ?? 0}*`,
-    `💭 النسيان: *${errors?.nisyan ?? 0}*`, T.SEP,
-    `📝 حفظ الغد: *${nextPagesText}*`,
-  ];
-  if (inTest) lines.push(`⚠️ _يتوقف الحفظ مؤقتًا ويُستأنف بعد إكمال الاختبار_`);
-  if (note) lines.push(note);
-  lines.push(T.SEP, ``, T.FOOTER);
-  return lines.join("\n");
-}
-
-function msgSuspend(
-  saveName: string, kind: StopVariant, fullName: string, isFU: boolean, iFT: boolean, target: StopTarget, fatherPhone: string, absData?: AbsenceData
-): string {
-  const reason = kind === "absence" ? "كثرة الغيابات أثناء فترة الحفظ" : "الرسوب المتكرر في التسميع";
-  if (target === "admin") {
-    const lines = [
-      T.HEADER, ``, T.SEP, `🔴 *تنبيه إداري — إيقاف حفظ*`, T.SEP, ``,
-      `📚 الحفظ: *${saveName}*`,
-      `${G.student(isFU)}: *${fullName}*`, ``,
-      `تم إيقاف ${G.his(isFU)} بسبب ${reason}.`,
-    ];
-    if (kind === "absence" && absData) {
-      lines.push(`📊 عدد الغيابات الكلي: *${absData.total}*`);
-      if (absData.last_stopped_at) lines.push(`📅 آخر إيقاف: *${absData.last_stopped_at}*`);
-    }
-    lines.push(
-      ``, `✅ تم إبلاغ ولي ${G.forHer(isFU)} وطُلب منه التواصل معكم.`,
-      `✅ تم إبلاغ ${G.teacherLbl(iFT)} ${G.supAdj(iFT)} ${G.supPrn(isFU)} بإيقاف الحفظ.`,
-      ``, `📞 إذا لم يتم التواصل خلال 24 ساعة يُرجى الاتصال على ولي ${G.forHer(isFU)}:`,
-      `*${fatherPhone}*`, ``, T.SEP, ``, `نسخة منها إلى:`, ...T.COPIES, T.SEP
-    );
-    return lines.join("\n");
-  }
-  if (target === "teacher") {
-    return [
-      T.HEADER, ``, T.SEP, `🔴 *إشعار إيقاف حفظ*`, T.SEP, ``,
-      `📚 الحفظ: *${saveName}*`, `${G.student(isFU)}: *${fullName}*`, ``,
-      `تم إيقاف ${G.his(isFU)} بسبب ${reason}.`,
-      `📌 في حال استئناف ${G.his(isFU)} سيتم ${G.iElmak(iFT)} بذلك.`, T.SEP
-    ].join("\n");
-  }
-  const nameLbl = target === "father" ? G.guardian(isFU) : G.student(isFU);
-  const his = target === "father" ? G.his(isFU) : G.hisSelf(isFU);
   return [
-    ...hdr(nameLbl, fullName), T.SEP,
+    buildHeader(nameLbl, saveName), T.SEP,
     `📚 الحفظ: *${saveName}*`,
-    `❌ تم إيقاف ${his} بسبب ${reason}.`,
-    `📞 يُرجى التواصل مع إدارة المركز على الرقم: *${T.ADMIN}*`, T.SEP, ``, T.FOOTER
+    `📄 الصفحة: *${pageDisp}*`,
+    `${emoji} الحالة: *${statusText}*`,
+    `📅 التوجيه: *يُؤجَّل الحفظ من ${dateStr} إلى ${untilStr}*`,
+    T.SEP, ``, T.FOOTER
   ].join("\n");
 }
 
-function msgCompletionStudent(
-  saveName: string, fullName: string, isFU: boolean, exam1Req: boolean, exam1TName: string, exam2Req: boolean, exam1TIsFemale: boolean
-): string {
-  const lines = [...hdr(G.student(isFU), fullName), T.SEP, `📚 الحفظ: *${saveName}*`, ``, T.BAYT, ``];
-  if (!exam1Req && !exam2Req) {
-    lines.push(
-      `سيتم إبلاغ الإدارة بذلك وسيتم إضافة حفظ جديد ${G.toHim(isFU)}.`,
-      `بارك الله ${G.inHim(isFU)} ${G.makeHim(isFU)} من الحفاظ والمداوميين على كتاب الله تعالى.`
-    );
-  } else if (exam1Req) {
-    lines.push(`بعد غدٍ سيكون ${G.toHim(isFU)} اختبار بكامل ${G.hisSelf(isFU)}.`);
-    if (exam1TName) lines.push(`🎓 ${G.willTest(isFU)} عند ${G.teacherLbl(exam1TIsFemale)}: *${exam1TName}*`);
-    lines.push(`بارك الله ${G.inHim(isFU)} ${G.makeHim(isFU)} من الحفاظ والمداوميين على كتاب الله تعالى.`);
-  }
-  if (exam2Req) lines.push(``, `📌 يُرجى التجهز للاختبار التراكمي — يوم غدٍ استراحة وبعده اختبار تراكمي بكل ${G.hisSelf(isFU)} خلال فترة الحفظ.`);
-  lines.push(T.SEP, ``, T.FOOTER);
-  return lines.join("\n");
+function msgDailyFinished(saveName: string, pageDisp: string, ps: string, errors: any, nextPagesText: string, isFU: boolean, forFather: boolean): string {
+  const nameLbl = forFather ? G.guardian(isFU) : G.student(isFU);
+  let resultText = ps === "perfect" ? "إتقان" : "إمتياز";
+  let emoji = ps === "perfect" ? "🌟" : "✅";
+
+  return [
+    buildHeader(nameLbl, saveName), T.SEP,
+    `📚 الحفظ: *${saveName}*`,
+    `📄 الصفحة: *${pageDisp}*`,
+    `${emoji} النتيجة: *${resultText}*`,
+    `🔴 أخطاء السواد: *${errors?.sowad ?? 0}*`,
+    `💭 النسيان: *${errors?.nisyan ?? 0}*`, T.SEP,
+    `📝 حفظ الغد: *${nextPagesText}*`,
+    T.SEP, ``, T.FOOTER
+  ].join("\n");
 }
 
-function msgCompletionGuardian(
-  saveName: string, fullName: string, isFU: boolean, exam1Req: boolean, exam2Req: boolean
-): string {
-  const lines = [ ...hdr(G.guardian(isFU), fullName), T.SEP, `📚 الحفظ: *${saveName}*`, ``, T.BAYT, ``, `أتمَّ ${G.student(isFU)} *${fullName}* ${G.his(isFU)} بحمد الله.`, ];
-  if (!exam1Req && !exam2Req) lines.push(`سيتم التواصل معكم من قِبَل الإدارة لتحديد حفظ جديد ${G.him(isFU)}.`);
-  else if (exam1Req) lines.push(`بعد غدٍ سيكون ${G.him(isFU)} اختبار بكامل ${G.his(isFU)}.`);
-  if (exam2Req) lines.push(`📌 وبعد الاختبار سيكون اختبار تراكمي بكامل ${G.his(isFU)} خلال فترة الحفظ.`);
-  lines.push(T.SEP, ``, T.FOOTER);
-  return lines.join("\n");
-}
-
-function msgCompletionTeacher(
-  saveName: string, fullName: string, isFU: boolean, iFT: boolean, exam1Active: boolean, exam2Active: boolean, activeExamTeacherName: string, activeExamTeacherIsFemale: boolean
-): string {
-  const lines = [ T.HEADER, ``, T.SEP, `📚 الحفظ: *${saveName}*`, `${G.student(isFU)}: *${fullName}*`, ``, `أتمَّ ${G.his(isFU)} بحمد الله.`, `` ];
-  if (exam1Active || exam2Active) {
-    lines.push(`وسوف يتم ${G.testHimHer(isFU)} عند ${G.anotherTeacher(activeExamTeacherIsFemale)} (*${activeExamTeacherName}*).`);
-  } else {
-    lines.push(`تم إبلاغ الإدارة وسيتم تحديد حفظ جديد ${G.him(isFU)}.`);
-  }
-  lines.push(``, G.bless(iFT) + ` على حسن التعاون والتزامك في نشر هذا العلم.`, T.SEP);
-  return lines.join("\n");
-}
-
-function msgCompletionAdmin(saveName: string, fullName: string, isFU: boolean, exam1Req: boolean): string {
-  return [ T.HEADER, ``, T.SEP, `📋 *إتمام حفظ*`, T.SEP, ``, `📚 الحفظ: *${saveName}*`, `${G.student(isFU)}: *${fullName}*`, ``, `أتمَّ ${G.his(isFU)} بحمد الله.`, exam1Req ? `📌 ${G.willTest3(isFU)} بعد غدٍ — يُرجى المتابعة.` : `📌 يُرجى تحديد حفظ جديد ${G.him(isFU)} ليبدأ به.`, T.SEP ].join("\n");
-}
-
-function msgExamAssignTeacher(
-  saveName: string, fullName: string, isFU: boolean, iFT: boolean, startPage: number, endPage: number, examType: ExamType, studentPhone: string
-): string {
-  const isCumul = examType === "EXAM2";
-  const examDesc = isCumul ? `الاختبار التراكمي الكلي للحفظ (${saveName})` : `اختبار الحفظ الكلي لـ(${saveName}) من الصفحة *${startPage}* إلى *${endPage}*`;
-  return [ T.HEADER, ``, T.SEP, `📋 *تكليف اختبار*`, T.SEP, ``, `${G.student(isFU)}: *${fullName}*`, `📚 الحفظ: *${saveName}*`, ``, `سيكون بعد غدٍ ${examDesc}.`, `${G.assigned(iFT)} لاختباره — يُرجى التواصل ${G.callWithYou(iFT)} على الرقم: *${convertPhone(studentPhone)}*`, T.SEP ].join("\n");
-}
-
-function msgExamDayStudent(
-  saveName: string, fullName: string, isFU: boolean, examTName: string, examTPhone: string, examType: ExamType, startPage: number, endPage: number, iEFT: boolean
-): string {
-  const isCumul = examType === "EXAM2";
-  const examDesc = isCumul ? `اختبار تراكمي بكامل ${G.hisSelf(isFU)} خلال فترة الحفظ` : `اختبار بالحفظ الكلي لـ(${saveName}) من الصفحة *${startPage}* إلى *${endPage}*`;
-  return [ ...hdr(G.student(isFU), fullName), T.SEP, `📚 الحفظ: *${saveName}*`, `🗒️ يوم غدٍ اختبار ${examDesc}`, `🎓 ${G.teacherLbl(iEFT)} على الاختبار: *${examTName}*`, `📞 رقم ${G.teacherLbl(iEFT)}: *${convertPhone(examTPhone)}*`, T.SEP, ``, T.FOOTER ].join("\n");
-}
-
-function msgExamDayGuardian(
-  saveName: string, fullName: string, isFU: boolean, examTName: string, examType: ExamType, iEFT: boolean
-): string {
-  const isCumul = examType === "EXAM2";
-  const examDesc = isCumul ? `اختبار تراكمي بكامل ${G.his(isFU)}` : `اختبار بالحفظ الكلي لـ(${saveName})`;
-  return [ ...hdr(G.guardian(isFU), fullName), T.SEP, `📚 الحفظ: *${saveName}*`, `🗒️ ${G.hasExam(isFU)} ${G.student(isFU)} *${fullName}* يوم غدٍ اختبار ${examDesc}`, `🎓 ${G.teacherLbl(iEFT)} على الاختبار: *${examTName}*`, T.SEP, ``, T.FOOTER ].join("\n");
-}
-
-function msgExamDayExamTeacher(
-  saveName: string, fullName: string, isFU: boolean, iFT: boolean, studentPhone: string, examType: ExamType, startPage: number, endPage: number
-): string {
-  const isCumul = examType === "EXAM2";
-  const examDesc = isCumul ? `اختبار تراكمي بكامل ${G.his(isFU)}` : `اختبار بالحفظ الكلي لـ(${saveName}) من الصفحة *${startPage}* إلى *${endPage}*`;
-  return [ T.HEADER, ``, T.SEP, `📋 *تذكير موعد اختبار*`, T.SEP, ``, `${G.student(isFU)}: *${fullName}*`, `📚 الحفظ: *${saveName}*`, ``, `${G.hasExam(isFU)} يوم غدٍ اختبار ${examDesc}`, `${G.yTeach(iFT)} ${G.teacherLbl(iFT)} المكلَّف باختباره.`, `📞 رقم ${G.student(isFU)}: *${convertPhone(studentPhone)}*`, T.SEP ].join("\n");
-}
-
-function msgExamSessionResult(
-  saveName: string, fullName: string, isFU: boolean, iFT: boolean, target: "student" | "father" | "examTeacher", variant: ExamVariant, delayDate: string, hi: HolidayInfo, examType: ExamType, absCount?: number
-): string {
-  const isCumul = examType === "EXAM2";
-  const examLabel = isCumul ? "الاختبار التراكمي" : `اختبار الحفظ (${saveName})`;
-  const note = holNoteE(hi);
-  const delayTxt = `ليوم غدٍ (${delayDate})`;
-  if (target === "examTeacher") {
-    let txt: string;
-    if (variant === "teacher_absence") txt = `لم يتم إجراء اختبار ${G.student(isFU)} *${fullName}* — يُؤجَّل ${examLabel} ${delayTxt}.`;
-    else if (variant === "user_absence") txt = `${G.student(isFU)} *${fullName}* ${G.absent(isFU)} — يُؤجَّل ${examLabel} ${delayTxt}.`;
-    else txt = `رسب ${G.student(isFU)} *${fullName}* في ${examLabel} — يُعاد ${delayTxt}.`;
-    const lines = [T.HEADER, ``, T.SEP, txt];
-    if (note) lines.push(note);
-    lines.push(T.SEP);
-    return lines.join("\n");
-  }
-  const nameLbl = target === "father" ? G.guardian(isFU) : G.student(isFU);
-  const lines = [ ...hdr(nameLbl, fullName), T.SEP, `📚 الحفظ: *${saveName}*`, `🗒️ ${examLabel}`, ];
-  if (variant === "teacher_absence") {
-    lines.push(`🔔 الحالة: *${G.notEval()}*`, `📅 يُؤجَّل الاختبار ${delayTxt}`);
-  } else if (variant === "user_absence") {
-    lines.push(`🔴 الحالة: *${G.absent(isFU)}*`, `📅 يُؤجَّل الاختبار ${delayTxt}`);
-    if (absCount != null) lines.push(`🔢 عدد الغيابات: *${absCount}*`);
-  } else {
-    lines.push(`❌ النتيجة: *رسوبٌ — يُعاد الاختبار ${delayTxt}*`);
-  }
-  if (note) lines.push(note);
-  lines.push(T.SEP, ``, T.FOOTER);
-  return lines.join("\n");
+function msgDailyFinishedReject(saveName: string, pageDisp: string, errors: any, isFU: boolean, forFather: boolean): string {
+  const nameLbl = forFather ? G.guardian(isFU) : G.student(isFU);
+  return [
+    buildHeader(nameLbl, saveName), T.SEP,
+    `📚 الحفظ: *${saveName}*`,
+    `📄 الصفحة: *${pageDisp}*`,
+    `❌ النتيجة: *رسوبٌ — يُعاد التسميع ليوم غدٍ*`,
+    `🔴 أخطاء السواد: *${errors?.sowad ?? 0}*`,
+    `💭 النسيان: *${errors?.nisyan ?? 0}*`,
+    T.SEP, ``, T.FOOTER
+  ].join("\n");
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  الدالة المركزية لمعالجة ومتابعة النظام اليومي للتحفيظ والاختبارات
+//  دوال صياغة رسائل الحفظ النهائي والاكتمال والاختبارات المخصصة
+// ════════════════════════════════════════════════════════════════════
+function msgAdminSuspension(saveName: string, kind: "absence" | "reject", fullName: string, isFU: boolean, fatherPhone: string): string {
+  const reason = kind === "absence" ? "كثرة الغيابات المتتالية" : "الرسوب المتكرر في التسميع";
+  return [
+    T.HEADER, T.SEP, `🔴 *تنبيه إداري — إيقاف بسبب ${kind === "absence" ? "الغياب" : "الرسوب"}*`, T.SEP, ``,
+    `📚 الحفظ: *${saveName}*`,
+    `${G.student(isFU)}: *${fullName}*`,
+    `تم إيقاف حساب ${G.his(isFU)} بسبب ${reason}.`,
+    `📞 هاتف ولي الأمر للتواصل خلال 24 ساعة: *${convertPhone(fatherPhone)}*`,
+    T.SEP, `نسخة منها إلى:`, ...T.COPIES, T.SEP
+  ].join("\n");
+}
+
+function msgAdminFinishedNoExams(saveName: string, fullName: string, isFU: boolean): string {
+  return [
+    T.HEADER, T.SEP, `📋 *إشعار إداري — إتمام الحفظ بنجاح*`, T.SEP, ``,
+    `📚 الحفظ: *${saveName}*`,
+    `${G.student(isFU)}: *${fullName}*`,
+    `أتمَّ ${G.his(isFU)} بنجاح وليس لديه أي اختبارات متبقية حالياً.`,
+    `📌 يُرجى إدراج وتحديد خطة حفظ جديدة للطالب.`,
+    T.SEP, `نسخة منها إلى:`, ...T.COPIES, T.SEP
+  ].join("\n");
+}
+
+function msgAdminExam1PassedNoExam2(saveName: string, fullName: string, isFU: boolean): string {
+  return [
+    T.HEADER, T.SEP, `📋 *إشعار إداري — اجتياز ${G.exam1Name}*`, T.SEP, ``,
+    `📚 الحفظ: *${saveName}*`,
+    `${G.student(isFU)}: *${fullName}*`,
+    `اجتَازَ بنجاح *${G.exam1Name}*، وليس لديه اختبار تراكمي ثانٍ مقرر.`,
+    `📌 يُرجى مراجعة ملف الطالب لتحديد التكليفات القادمة.`,
+    T.SEP, `نسخة منها إلى:`, ...T.COPIES, T.SEP
+  ].join("\n");
+}
+
+function msgAdminExam2Passed(saveName: string, fullName: string, isFU: boolean): string {
+  return [
+    T.HEADER, T.SEP, `📋 *إشعار إداري — اجتياز ${G.exam2Name}*`, T.SEP, ``,
+    `📚 الحفظ: *${saveName}*`,
+    `${G.student(isFU)}: *${fullName}*`,
+    `اجتَازَ بنجاح وبشكل نهائي كامل *${G.exam2Name}*.`,
+    `📌 تم إغلاق الحفظ الحالي واكتماله بالكامل في النظام.`,
+    T.SEP, `نسخة منها إلى:`, ...T.COPIES, T.SEP
+  ].join("\n");
+}
+
+function msgStudentCompletion(saveName: string, isFU: boolean, e1Req: boolean, exam1TName: string, e2Req: boolean, iEFT: boolean): string {
+  const lines = [T.HEADER, T.SEP, `📚 الحفظ: *${saveName}*`, T.BAYT];
+  if (!e1Req && !e2Req) {
+    lines.push(`سيتم إبلاغ الإدارة لجدولة خطة جديدة ${G.toHim(isFU)}.`);
+  } else if (e1Req) {
+    lines.push(`بعد غدٍ سيكون موعد اختبارك في *${G.exam1Name}*.`);
+    if (exam1TName) lines.push(`🎓 ${G.willTest(isFU)} عند ${G.teacherLbl(iEFT)}: *${exam1TName}*`);
+  }
+  if (e2Req) lines.push(`📌 يليه لاحقاً الاستعداد لـ *${G.exam2Name}* بكل حفظك.`);
+  lines.push(T.SEP, ``, T.FOOTER);
+  return lines.join("\n");
+}
+
+function msgExamDayStudent(saveName: string, isFU: boolean, eTName: string, eTPhone: string, isExam2: boolean, iEFT: boolean): string {
+  const exLabel = isExam2 ? G.exam2Name : G.exam1Name;
+  return [
+    T.HEADER, T.SEP, `📚 الحفظ: *${saveName}*`,
+    `🗒️ يوم غدٍ موعد اختبارك في: *${exLabel}*`,
+    `🎓 ${G.teacherLbl(iEFT)} على الاختبار: *${eTName}*`,
+    `📞 رقم الهاتف للتواصل: *${convertPhone(eTPhone)}*`,
+    T.SEP, ``, T.FOOTER
+  ].join("\n");
+}
+
+function msgExamDayGuardian(saveName: string, fullName: string, isFU: boolean, eTName: string, isExam2: boolean, iEFT: boolean): string {
+  const exLabel = isExam2 ? G.exam2Name : G.exam1Name;
+  return [
+    T.HEADER, T.SEP, `👤 ${G.guardian(isFU)}: *${fullName}*`, T.SEP,
+    `📚 الحفظ: *${saveName}*`,
+    `🗒️ نود إعلامكم بأن يوم غدٍ هو موعد اختبار الطالب في *${exLabel}*`,
+    `🎓 ${G.teacherLbl(iEFT)} المسؤول: *${eTName}*`,
+    T.SEP, ``, T.FOOTER
+  ].join("\n");
+}
+
+function msgExamDayTeacher(saveName: string, fullName: string, isFU: boolean, iFT: boolean, sPhone: string, isExam2: boolean): string {
+  const exLabel = isExam2 ? G.exam2Name : G.exam1Name;
+  return [
+    T.HEADER, T.SEP, `📋 *تذكير بجدولة اختبار*`, T.SEP, ``,
+    `الطالب: *${fullName}*`,
+    `📚 الحفظ: *${saveName}*`,
+    `لديه يوم غدٍ اختبار في *${exLabel}*.`,
+    `وأنتَ ${G.teacherLbl(iFT)} المكلف بإجراء الاختبار ورصد الدرجة.`,
+    `📞 رقم الطالب: *${convertPhone(sPhone)}*`,
+    T.SEP
+  ].join("\n");
+}
+
+function msgExamSessionResult(saveName: string, fullName: string, isFU: boolean, variant: "user_absence" | "teacher_absence" | "reject", isExam2: boolean): string {
+  const exLabel = isExam2 ? G.exam2Name : G.exam1Name;
+  let resStr = "نجاح";
+  if (variant === "user_absence") resStr = "غياب الطالب";
+  else if (variant === "teacher_absence") resStr = "مشرف غائب";
+  else if (variant === "reject") resStr = "رسوب";
+
+  return [
+    T.HEADER, T.SEP,
+    `👤 الطالب: *${fullName}*`,
+    `📚 الحفظ: *${saveName}*`,
+    `🗒️ نوع الاختبار: *${exLabel}*`,
+    `📌 النتيجة الموثقة: *${resStr}* — يُعاد جدولة الموعد آلياً.`,
+    T.SEP, ``, T.FOOTER
+  ].join("\n");
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  الدالة المركزية والمحرك الأساسي للنظام
 // ════════════════════════════════════════════════════════════════════
 export async function handleDailySaves() {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -566,9 +362,23 @@ export async function handleDailySaves() {
 
   const today = todayStr();
   const tomorrow = addDays(today, 1);
-  console.log(`[DAILY SYSTEM RUNNING] GMT+3 Baghdad. Today: ${today}, Tomorrow: ${tomorrow}`);
+  console.log(`[SYSTEM STARTED AT 23:45 BAGHDAD] Today: ${today}, Tomorrow: ${tomorrow}`);
 
-  // جلب كافة الحفظ المفتوح أو الواقع تحت الاختبار
+  // الحفاظ على مصفوفات لتجميع سجلات الإحصائيات الشاملة للرسالتين الإداريتين في النهاية
+  const logEntries: LogEntry[] = [];
+  const absentTeachersNames: string[] = [];
+
+  // عدادات الرسالة الأولى لقاعدة البيانات الحالية لليوم
+  let countSuccessSave = 0;
+  let countSuccessTest = 0;
+  let countRejectSave = 0;
+  let countRejectTest = 0;
+  let countPerfectSave = 0;
+  let countGoodSave = 0;
+  let countAbsenceUser = 0;
+  let countAbsenceTeacher = 0;
+
+  // جلب كافة صفوف الحفظ المفتوحة والنشطة والواقعة تحت قيد الاختبار المجدول
   const { data: saves, error: sErr } = await supabase
     .from("users_saves")
     .select(`
@@ -581,39 +391,27 @@ export async function handleDailySaves() {
     .in("status", ["ACTIVE", "IN_EXAM1", "IN_EXAM2"]);
 
   if (sErr || !saves) {
-    console.error("[FETCH SAVES ERROR]:", sErr);
+    console.error("[CRITICAL ERROR FETCHING SAVES]:", sErr);
     return;
   }
 
-
-  // جلب إجازات الغد المسبقة للجدولة والتحقق
-  const { data: tomHolidays } = await supabase
-    .from("holidays")
-    .select("*")
-    .eq("date", tomorrow);
+  // بناء سياق الإجازات لليوم وللغد
+  const { data: tomHolidays } = await supabase.from("holidays").select("*").eq("date", tomorrow);
   const tomCtx = await buildHolidayContext(supabase, tomHolidays ?? []);
 
-  // جلب إجازات اليوم لمعالجة الغيابات والإجراءات الحالية
-  const { data: todayHolidays } = await supabase
-    .from("holidays")
-    .select("*")
-    .eq("date", today);
-  const todCtx = await buildHolidayContext(supabase, todayHolidays ?? []);
-
   for (const s of saves) {
+    if (!s.user || !s.teacher) continue;
     const uid = s.user_id;
     const tid = s.teacher_id;
-    if (!s.user || !s.teacher) continue;
-
-    const isFU  = s.user.gender === "female";
-    const iFT  = s.teacher.gender === "female";
-    const fName = s.user.full_name ?? "طالب غير مسمى";
-    const sName = s.name ?? "حفظ";
+    const isFU = s.user.gender === "female";
+    const iFT = s.teacher.gender === "female";
+    const fName = s.user.full_name ?? "طالب";
+    const sName = s.name ?? "خطة الحفظ";
     const fPhone = s.user.father_phone ?? "";
     const sPhone = s.user.phone ?? "";
 
     // ─────────────────────────────────────────────────────────────────
-    //  الحالة الأولى: الطالب في وضع الحفظ اليومي النشط (ACTIVE)
+    //  أولاً: معالجة حالة الحفظ اليومي النشط (ACTIVE)
     // ─────────────────────────────────────────────────────────────────
     if (s.status === "ACTIVE") {
       const { data: pageRow } = await supabase
@@ -623,221 +421,344 @@ export async function handleDailySaves() {
         .eq("date", today)
         .maybeSingle();
 
-      if (!pageRow) continue; // لم يقم المعلم بأي ترحيل أو تقييم بعد لليوم
+      if (!pageRow) continue;
 
-      const pStatus = pageRow.status; // not_ready, user_absence, teacher_absence, finished
-      const pEval   = pageRow.page_status; // perfect, good, reject, not_ready
+      const pStatus = pageRow.status; // finished, user_absence, teacher_absence, holiday, public_holiday, teacher_holiday
+      const pEval = pageRow.page_status; // perfect, good, reject, not_ready
       const pageNum = pageRow.page ?? 1;
-      const edp     = s.every_day_pages ?? 1;
-      const pageDisp = buildPageDisplay(pageNum, edp);
+      const edp = s.every_day_pages ?? 1;
+      const pageDisp = Array.from({ length: Math.ceil(edp) }, (_, i) => String(pageNum - (Math.ceil(edp) - 1 - i))).join(" و ");
 
-      // 1. معالجة الغياب اليومي (سواء غياب الطالب أو المعلم أو وجود إجازة)
+      // أ. معالجة حالات الغيابات أو الإجازات لليوم الحالي
       if (pStatus === "user_absence" || pStatus === "teacher_absence" || pStatus === "holiday" || pStatus === "public_holiday" || pStatus === "teacher_holiday") {
-        const tripleAbs = await checkTriple(supabase, uid, s.id, "users_pages", "absence");
-        if (tripleAbs.isTriple && pStatus === "user_absence") {
-          await suspendSave(supabase, s.id, "absence", tripleAbs.dates, sName, "ACTIVE");
-          const mAdmin   = msgSuspend(sName, "absence", fName, isFU, iFT, "admin", fPhone, { total: tripleAbs.dates.length, last_check: null, last_stopped_at: null, stopped_abs_total: 0 });
-          const mTeacher = msgSuspend(sName, "absence", fName, isFU, iFT, "teacher", fPhone);
-          const mStudent = msgSuspend(sName, "absence", fName, isFU, iFT, "student", fPhone);
-          const mFather  = msgSuspend(sName, "absence", fName, isFU, iFT, "father", fPhone);
-          // إرسال الرسائل عبر الـ Queue أو الـ API الخاص بالمركز
-          continue;
-        }
+        let resultLogText = "غياب";
+        if (pStatus === "user_absence") {
+          countAbsenceUser++;
+          const tripleAbs = await checkTripleSequence(supabase, uid, s.id, "users_pages", "absence");
+          if (tripleAbs.isTriple) {
+            await supabase.from("users_saves").update({ status: "SUSPENDED", status_reason: "إيقاف بسبب الغياب المتكرر للحفظ" }).eq("id", s.id);
+            // إرسال فوري للادارة بسبب الإيقاف بالغياب كما هو مطلوب بالشرط الأول للادارة
+            const mAdm = msgAdminSuspension(sName, "absence", fName, isFU, fPhone);
+            await sendNotificationLog(supabase, T.ADMIN, mAdm);
+            logEntries.push({ studentName: fName, typeLabel: "الحفظ اليومي", resultLabel: "غياب" });
+            continue;
+          }
+        } else if (pStatus === "teacher_absence") {
+          countAbsenceTeacher++;
+          resultLogText = "مشرف غائب";
+          if (!absentTeachersNames.includes(s.teacher.full_name)) absentTeachersNames.push(s.teacher.full_name);
+        } else if (pStatus === "holiday") resultLogText = "إجازة خاصة";
+        else if (pStatus === "public_holiday") resultLogText = "اجازة عامة";
+        else if (pStatus === "teacher_holiday") resultLogText = "المشرف مجاز";
 
-        const isShift = (pStatus === "user_absence" || pStatus === "teacher_absence");
-        const nextDate = untilDate(today, isShift);
-        const tomHi = computeHolidayInfo(uid, tid, isFU, iFT, tomCtx);
-        const pageStatusTom = computeNewPageStatus(uid, tid, false, tomCtx);
+        logEntries.push({ studentName: fName, typeLabel: "الحفظ اليومي", resultLabel: resultLogText });
 
-        // إنشاء صف اليوم التالي للحفظ بناءً على التعديلات والجدولة
-        await createPageRow(supabase, uid, s.id, tid, s.teacher.full_name, s.teacher.photo_url, pageNum, edp, {
-          date: tomorrow, status: pageStatusTom, page_status: "not_ready"
-        });
+        const tomStatus = computeNewRowStatus(uid, tid, tomCtx);
+        await supabase.from("users_pages").insert([{
+          user_id: uid, save_id: s.id, teacher_id: tid, teacher_name: s.teacher.full_name,
+          page: pageNum, status: tomStatus, page_status: "not_ready", date: tomorrow
+        }]);
 
-        const mSt = msgAbsence(sName, pageDisp, today, nextDate, 0, isFU, iFT, false, pStatus as PageVariant, tomHi, fName);
-        const mFa = msgAbsence(sName, pageDisp, today, nextDate, 0, isFU, iFT, true, pStatus as PageVariant, tomHi, fName);
-        if (pStatus === "teacher_absence") {
-          await updateTeacherAbsence(supabase, tid, today, fName);
-        }
+        const mSt = msgDailyAbsence(sName, pageDisp, today, tomorrow, isFU, false, pStatus);
+        const mFa = msgDailyAbsence(sName, pageDisp, today, tomorrow, isFU, true, pStatus);
+        await sendNotificationLog(supabase, sPhone, mSt);
+        await sendNotificationLog(supabase, fPhone, mFa);
         continue;
       }
 
-      // 2. معالجة إكمال صفحة التسميع بنجاح أو رسوب اليوم
+      // ب. معالجة حالات انتهاء التقييم (finished) بنجاح أو رسوب
       if (pStatus === "finished") {
         if (pEval === "reject") {
-          const tripleRej = await checkTriple(supabase, uid, s.id, "users_pages", "reject");
+          countRejectSave++;
+          logEntries.push({ studentName: fName, typeLabel: "الحفظ اليومي", resultLabel: "رسوب" });
+
+          const tripleRej = await checkTripleSequence(supabase, uid, s.id, "users_pages", "reject");
           if (tripleRej.isTriple) {
-            await suspendSave(supabase, s.id, "reject", tripleRej.dates, sName, "ACTIVE");
-            const mAdmin   = msgSuspend(sName, "reject", fName, isFU, iFT, "admin", fPhone);
-            const mTeacher = msgSuspend(sName, "reject", fName, isFU, iFT, "teacher", fPhone);
-            const mStudent = msgSuspend(sName, "reject", fName, isFU, iFT, "student", fPhone);
-            const mFather  = msgSuspend(sName, "reject", fName, isFU, iFT, "father", fPhone);
+            await supabase.from("users_saves").update({ status: "SUSPENDED", status_reason: "إيقاف بسبب الرسوب المتكرر في الحفظ" }).eq("id", s.id);
+            const mAdm = msgAdminSuspension(sName, "reject", fName, isFU, fPhone);
+            await sendNotificationLog(supabase, T.ADMIN, mAdm);
             continue;
           }
 
-          const tomHi = computeHolidayInfo(uid, tid, isFU, iFT, tomCtx);
-          const pageStatusTom = computeNewPageStatus(uid, tid, false, tomCtx);
-          await createPageRow(supabase, uid, s.id, tid, s.teacher.full_name, s.teacher.photo_url, pageNum, edp, {
-            date: tomorrow, status: pageStatusTom, page_status: "not_ready"
-          });
+          const tomStatus = computeNewRowStatus(uid, tid, tomCtx);
+          await supabase.from("users_pages").insert([{
+            user_id: uid, save_id: s.id, teacher_id: tid, teacher_name: s.teacher.full_name,
+            page: pageNum, status: tomStatus, page_status: "not_ready", date: tomorrow
+          }]);
 
-          const mSt = msgFinished(sName, pageDisp, pEval, pageRow.errors_number, pageDisp, isFU, iFT, false, false, tomHi, fName);
-          const mFa = msgFinished(sName, pageDisp, pEval, pageRow.errors_number, pageDisp, isFU, iFT, true, false, tomHi, fName);
+          const mSt = msgDailyFinishedReject(sName, pageDisp, pageRow.errors_number, isFU, false);
+          const mFa = msgDailyFinishedReject(sName, pageDisp, pageRow.errors_number, isFU, true);
+          await sendNotificationLog(supabase, sPhone, mSt);
+          await sendNotificationLog(supabase, fPhone, mFa);
           continue;
         }
 
-        // النجاح والعبور للصفحة التالية
         if (pEval === "perfect" || pEval === "good") {
-          const isCompleted = (pageNum >= (s.end_page ?? 604));
+          countSuccessSave++;
+          if (pEval === "perfect") { countPerfectSave++; logEntries.push({ studentName: fName, typeLabel: "الحفظ اليومي", resultLabel: "إتقان" }); }
+          else { countGoodSave++; logEntries.push({ studentName: fName, typeLabel: "الحفظ اليومي", resultLabel: "إمتياز" }); }
 
-          if (isCompleted) {
-            // الطالب أتم كامل الخطة المقررة للحفظ بنجاح مبهر
-            await supabase.from("users_saves").update({ status: "FINISHED" }).eq("id", s.id);
-            
-            const e1Req = !!s.exam1_active;
-            const e2Req = !!s.exam2_active;
-            const activeExamTeacherName = s.exam1_teacher?.full_name ?? s.exam2_teacher?.full_name ?? "";
-            const activeExamTeacherIsFemale = s.exam1_teacher?.gender === "female" || s.exam2_teacher?.gender === "female";
+          const isFinalPage = pageNum >= (s.end_page ?? 604);
+          if (isFinalPage) {
+            // اكتمال خطة الحفظ تماماً والتحول لمرحلة الاختبارات الجزئية أو التراكمية
+            const e1Active = !!s.exam1_active;
+            const e2Active = !!s.exam2_active;
 
-            const mSt = msgCompletionStudent(sName, fName, isFU, e1Req, s.exam1_teacher?.full_name ?? "", e2Req, s.exam1_teacher?.gender === "female");
-            const mFa = msgCompletionGuardian(sName, fName, isFU, e1Req, e2Req);
-            const mAd = msgCompletionAdmin(sName, fName, isFU, e1Req);
-            // إرسال إشعار لمعلم الحفظ وتنبيهه بأن الطالب سينتقل لمشرف آخر للاختبار
-            const mTe = msgCompletionTeacher(sName, fName, isFU, iFT, e1Req, e2Req, activeExamTeacherName, activeExamTeacherIsFemale);
-            
-            // عند اكتمال الحفظ، إذا كان هناك اختبار فعال، يتم جدولة التكليف بعد غد تلقائياً
-            if (e1Req && s.exam1_teacher_id) {
-              await updateSaveExamFields(supabase, s.id, "EXAM1", "PENDING", "PENDING");
-              const mAssign = msgExamAssignTeacher(sName, fName, isFU, s.exam1_teacher.gender === "female", s.start_page, s.end_page, "EXAM1", sPhone);
+            if (e1Active) {
+              await supabase.from("users_saves").update({ status: "IN_EXAM1" }).eq("id", s.id);
+              // جدولة وتكليف المشرف الأول بعد غد
+              const testDate = addDays(today, 2);
+              await supabase.from("users_pages_tests").insert([{
+                user_id: uid, save_id: s.id, teacher_id: s.exam1_teacher_id ?? tid,
+                teacher_name: s.exam1_teacher?.full_name ?? s.teacher.full_name,
+                status: "not_ready", page_status: "not_ready", type: "EXAM1",
+                start_page: s.start_page ?? 1, end_page: s.end_page ?? 604, date: testDate
+              }]);
+
+              if (s.exam1_teacher?.phone) {
+                const mAss = msgExamDayTeacher(sName, fName, isFU, s.exam1_teacher.gender === "female", sPhone, false);
+                await sendNotificationLog(supabase, s.exam1_teacher.phone, mAss);
+              }
+            } else if (e2Active) {
+              await supabase.from("users_saves").update({ status: "IN_EXAM2" }).eq("id", s.id);
+              const testDate = addDays(today, 2);
+              await supabase.from("users_pages_tests").insert([{
+                user_id: uid, save_id: s.id, teacher_id: s.exam2_teacher_id ?? tid,
+                teacher_name: s.exam2_teacher?.full_name ?? s.teacher.full_name,
+                status: "not_ready", page_status: "not_ready", type: "EXAM2",
+                start_page: s.start_page ?? 1, end_page: s.end_page ?? 604, date: testDate
+              }]);
+            } else {
+              // نجح وليس له أي اختبارات حالية مطلقة
+              await supabase.from("users_saves").update({ status: "FINISHED" }).eq("id", s.id);
+              const mAdm = msgAdminFinishedNoExams(sName, fName, isFU);
+              await sendNotificationLog(supabase, T.ADMIN, mAdm);
             }
+
+            const mSt = msgStudentCompletion(sName, isFU, e1Active, s.exam1_teacher?.full_name ?? "", e2Active, s.exam1_teacher?.gender === "female");
+            await sendNotificationLog(supabase, sPhone, mSt);
+            continue;
           } else {
-            // الاستمرار اليومي الطبيعي - الانتقال للصفحات التالية
+            // الانتقال والمتابعة لصفحة الحفظ التالية في خطة التسميع اليومية المستمرة
             const nextPage = pageNum + edp;
-            const nextDisp = buildPageDisplay(nextPage, edp);
-            const tomHi = computeHolidayInfo(uid, tid, isFU, iFT, tomCtx);
-            const pageStatusTom = computeNewPageStatus(uid, tid, false, tomCtx);
+            const tomStatus = computeNewRowStatus(uid, tid, tomCtx);
+            await supabase.from("users_pages").insert([{
+              user_id: uid, save_id: s.id, teacher_id: tid, teacher_name: s.teacher.full_name,
+              page: nextPage, status: tomStatus, page_status: "not_ready", date: tomorrow
+            }]);
 
-            await createPageRow(supabase, uid, s.id, tid, s.teacher.full_name, s.teacher.photo_url, nextPage, edp, {
-              date: tomorrow, status: pageStatusTom, page_status: "not_ready"
-            });
-
-            const nextNames = await getPageNames(supabase, nextPage, edp);
-            const mSt = msgFinished(sName, pageDisp, pEval, pageRow.errors_number, nextNames, isFU, iFT, false, false, tomHi, fName);
-            const mFa = msgFinished(sName, pageDisp, pEval, pageRow.errors_number, nextNames, isFU, iFT, true, false, tomHi, fName);
+            const mSt = msgDailyFinished(sName, pageDisp, pEval, pageRow.errors_number, String(nextPage), isFU, false);
+            const mFa = msgDailyFinished(sName, pageDisp, pEval, pageRow.errors_number, String(nextPage), isFU, true);
+            await sendNotificationLog(supabase, sPhone, mSt);
+            await sendNotificationLog(supabase, fPhone, mFa);
           }
         }
       }
     }
 
+
     // ─────────────────────────────────────────────────────────────────
-    //  الحالة الثانية والثالثة: الطالب في مرحلة الاختبارات (EXAM1 / EXAM2)
+    //  ثانياً: معالجة حالة الاختبارات الجزئية والتراكمية (EXAM1 / EXAM2)
     // ─────────────────────────────────────────────────────────────────
-    const isInExam = s.status === "IN_EXAM1" || s.status === "IN_EXAM2";
-    if (isInExam) {
-      const eType: ExamType = s.status === "IN_EXAM1" ? "EXAM1" : "EXAM2";
-      const eTeacher = eType === "EXAM1" ? s.exam1_teacher : s.exam2_teacher;
-      if (!eTeacher) continue;
+    const isInExamMode = s.status === "IN_EXAM1" || s.status === "IN_EXAM2";
+    if (isInExamMode) {
+      const isExam2 = s.status === "IN_EXAM2";
+      const exType = isExam2 ? "EXAM2" : "EXAM1";
+      const exLabel = isExam2 ? G.exam2Name : G.exam1Name;
+      const currentExamTeacher = isExam2 ? s.exam2_teacher : s.exam1_teacher;
 
-      const iEFT = eTeacher.gender === "female";
+      if (!currentExamTeacher) continue;
+      const iEFT = currentExamTeacher.gender === "female";
 
-      // جلب صف الاختبار الحالي لليوم للتحقق من النتيجة أو الحالة المقيدة
-      const { data: testRow } = await supabase
+      // 1. منطق التنبيه والجدولة الآلية المسبقة بـ 24 ساعة (عند الفارق diffDays === 1 للتاريخ المسجل)
+      const { data: latestTestRow } = await supabase
         .from("users_pages_tests")
-        .select("*")
+        .select("date, status")
         .eq("save_id", s.id)
-        .eq("type", eType)
-        .eq("date", today)
-        .maybeSingle();
-
-      // جدولة وتأكيد إشعار "يوم غدٍ الاختبار" عند فحص الفروق بمرور 24 ساعة
-      // يتم الفحص استناداً لتاريخ إنشاء أو تفعيل الاختبار الفعال للـ exam_number
-      const { data: prevTestRow } = await supabase
-        .from("users_pages_tests")
-        .select("date")
-        .eq("save_id", s.id)
-        .eq("type", eType)
+        .eq("type", exType)
         .order("id", { ascending: false })
         .limit(1);
 
-      if (prevTestRow && prevTestRow.length > 0) {
-        const lastTestDate = prevTestRow[0].date;
-        const daysDiff = diffDays(lastTestDate, today);
+      if (latestTestRow && latestTestRow.length > 0) {
+        const targetDateStr = latestTestRow[0].date;
+        if (diffDays(today, targetDateStr) === 1) {
+          // غداً هو يوم الاختبار الفعلي المجدول، ننشئ صف الغد مسبقاً لمنع التأخير التوثيقي
+          const tomStatus = computeNewRowStatus(uid, currentExamTeacher.teacher_id, tomCtx);
+          const hasTomorrowRow = await supabase.from("users_pages_tests").select("id").eq("save_id", s.id).eq("type", exType).eq("date", tomorrow).maybeSingle();
+          
+          if (!hasTomorrowRow.data) {
+            await supabase.from("users_pages_tests").insert([{
+              user_id: uid, save_id: s.id, teacher_id: currentExamTeacher.teacher_id,
+              teacher_name: currentExamTeacher.full_name, status: tomStatus, page_status: "not_ready",
+              type: exType, start_page: s.start_page ?? 1, end_page: s.end_page ?? 604, date: tomorrow
+            }]);
+          }
 
-        // إذا كان الفارق يوماً واحداً وغداً هو الموعد النهائي للاختبار الفعلي، نقوم بإضافة الصف وإرسال التذكير فوراً الساعة 11:45
-        if (daysDiff === 1) {
-          const examStatusTom = computeNewPageStatus(uid, eTeacher.teacher_id, false, tomCtx);
-          // إضافة صف الاختبار المجهز للغد مسبقاً في قاعدة البيانات لمنع أي تأخير صباحي
-          await createTestRow(supabase, uid, s.id, eTeacher.teacher_id, eTeacher.full_name, eType, s.start_page ?? 1, s.end_page ?? 604, {
-            date: tomorrow, status: examStatusTom, page_status: "not_ready"
-          });
+          const mSt = msgExamDayStudent(sName, isFU, currentExamTeacher.full_name, currentExamTeacher.phone ?? "", isExam2, iEFT);
+          const mFa = msgExamDayGuardian(sName, fName, isFU, currentExamTeacher.full_name, isExam2, iEFT);
+          const mTe = msgExamDayTeacher(sName, fName, isFU, iEFT, sPhone, isExam2);
 
-          // صياغة وإرسال رسائل التذكير الصريحة حسب رقم ورقم مشرف الاختبار المخصص
-          const mStudentDay = msgExamDayStudent(sName, fName, isFU, eTeacher.full_name, eTeacher.phone ?? "", eType, s.start_page ?? 1, s.end_page ?? 604, iEFT);
-          const mGuardianDay = msgExamDayGuardian(sName, fName, isFU, eTeacher.full_name, eType, iEFT);
-          const mTeacherDay = msgExamDayExamTeacher(sName, fName, isFU, iEFT, sPhone, eType, s.start_page ?? 1, s.end_page ?? 604);
+          await sendNotificationLog(supabase, sPhone, mSt);
+          await sendNotificationLog(supabase, fPhone, mFa);
+          if (currentExamTeacher.phone) await sendNotificationLog(supabase, currentExamTeacher.phone, mTe);
         }
       }
 
-      if (!testRow) continue;
+      // 2. التحقق من رصد النتيجة والتقييم لليوم الحالي ومعالجة الإجراء المترتب عليها
+      const { data: currentDayTest } = await supabase
+        .from("users_pages_tests")
+        .select("*")
+        .eq("save_id", s.id)
+        .eq("type", exType)
+        .eq("date", today)
+        .maybeSingle();
 
-      const tStatus = testRow.status; // finished, user_absence, teacher_absence
-      const tEval   = testRow.page_status; // perfect, good, reject
+      if (!currentDayTest) continue;
 
-      if (tStatus === "user_absence" || tStatus === "teacher_absence") {
-        const tripleAbsTest = await checkTriple(supabase, uid, s.id, "users_pages_tests", "absence", eType);
-        if (tripleAbsTest.isTriple && tStatus === "user_absence") {
-          await suspendSave(supabase, s.id, "absence", tripleAbsTest.dates, sName, s.status, true);
-          continue;
-        }
+      const tStatus = currentDayTest.status;
+      const tEval = currentDayTest.page_status;
 
-        const isShift = (tStatus === "user_absence" || tStatus === "teacher_absence");
-        const nextTestDate = addDays(today, 1);
-        const tomHi = computeHolidayInfo(uid, eTeacher.teacher_id, isFU, iEFT, tomCtx);
+      if (tStatus === "user_absence" || tStatus === "teacher_absence" || tStatus === "holiday" || tStatus === "public_holiday" || tStatus === "teacher_holiday") {
+        let resLogText = "غياب";
+        if (tStatus === "user_absence") {
+          countAbsenceUser++;
+          const tripleAbsTest = await checkTripleSequence(supabase, uid, s.id, "users_pages_tests", "absence", exType);
+          if (tripleAbsTest.isTriple) {
+            await supabase.from("users_saves").update({ status: "SUSPENDED", status_reason: `إيقاف بسبب الغياب المتكرر في ${exLabel}` }).eq("id", s.id);
+            const mAdm = msgAdminSuspension(sName, "absence", fName, isFU, fPhone);
+            await sendNotificationLog(supabase, T.ADMIN, mAdm);
+            logEntries.push({ studentName: fName, typeLabel: exLabel, resultLabel: "غياب" });
+            continue;
+          }
+        } else if (tStatus === "teacher_absence") {
+          countAbsenceTeacher++;
+          resLogText = "مشرف غائب";
+          if (!absentTeachersNames.includes(currentExamTeacher.full_name)) absentTeachersNames.push(currentExamTeacher.full_name);
+        } else if (tStatus === "holiday") resLogText = "إجازة خاصة";
+        else if (tStatus === "public_holiday") resLogText = "اجازة عامة";
+        else if (tStatus === "teacher_holiday") resLogText = "المشرف مجاز";
 
-        const mExT = msgExamSessionResult(sName, fName, isFU, iFT, "examTeacher", tStatus as ExamVariant, nextTestDate, tomHi, eType);
-        const mSt  = msgExamSessionResult(sName, fName, isFU, iFT, "student", tStatus as ExamVariant, nextTestDate, tomHi, eType);
-        const mFa  = msgExamSessionResult(sName, fName, isFU, iFT, "father", tStatus as ExamVariant, nextTestDate, tomHi, eType);
-        
-        if (tStatus === "teacher_absence") {
-          await updateTeacherAbsence(supabase, eTeacher.teacher_id, today, fName);
-        }
+        logEntries.push({ studentName: fName, typeLabel: exLabel, resultLabel: resLogText });
+
+        const tomStatus = computeNewRowStatus(uid, currentExamTeacher.teacher_id, tomCtx);
+        await supabase.from("users_pages_tests").insert([{
+          user_id: uid, save_id: s.id, teacher_id: currentExamTeacher.teacher_id,
+          teacher_name: currentExamTeacher.full_name, status: tomStatus, page_status: "not_ready",
+          type: exType, start_page: s.start_page ?? 1, end_page: s.end_page ?? 604, date: tomorrow
+        }]);
+
+        const variantKey = (tStatus === "user_absence" || tStatus === "teacher_absence") ? tStatus : "user_absence";
+        const mResult = msgExamSessionResult(sName, fName, isFU, variantKey as any, isExam2);
+        await sendNotificationLog(supabase, sPhone, mResult);
+        await sendNotificationLog(supabase, fPhone, mResult);
         continue;
       }
 
       if (tStatus === "finished") {
         if (tEval === "reject") {
-          const tripleRejTest = await checkTriple(supabase, uid, s.id, "users_pages_tests", "reject", eType);
+          countRejectTest++;
+          logEntries.push({ studentName: fName, typeLabel: exLabel, resultLabel: "رسوب" });
+
+          const tripleRejTest = await checkTripleSequence(supabase, uid, s.id, "users_pages_tests", "reject", exType);
           if (tripleRejTest.isTriple) {
-            await suspendSave(supabase, s.id, "reject", tripleRejTest.dates, sName, s.status, true);
+            await supabase.from("users_saves").update({ status: "SUSPENDED", status_reason: `إيقاف بسبب الرسوب المتكرر في ${exLabel}` }).eq("id", s.id);
+            const mAdm = msgAdminSuspension(sName, "reject", fName, isFU, fPhone);
+            await sendNotificationLog(supabase, T.ADMIN, mAdm);
             continue;
           }
 
-          const nextTestDate = addDays(today, 1);
-          const tomHi = computeHolidayInfo(uid, eTeacher.teacher_id, isFU, iEFT, tomCtx);
+          const tomStatus = computeNewRowStatus(uid, currentExamTeacher.teacher_id, tomCtx);
+          await supabase.from("users_pages_tests").insert([{
+            user_id: uid, save_id: s.id, teacher_id: currentExamTeacher.teacher_id,
+            teacher_name: currentExamTeacher.full_name, status: tomStatus, page_status: "not_ready",
+            type: exType, start_page: s.start_page ?? 1, end_page: s.end_page ?? 604, date: tomorrow
+          }]);
 
-          const mExT = msgExamSessionResult(sName, fName, isFU, iFT, "examTeacher", "reject", nextTestDate, tomHi, eType);
-          const mSt  = msgExamSessionResult(sName, fName, isFU, iFT, "student", "reject", nextTestDate, tomHi, eType);
-          const mFa  = msgExamSessionResult(sName, fName, isFU, iFT, "father", "reject", nextTestDate, tomHi, eType);
+          const mResult = msgExamSessionResult(sName, fName, isFU, "reject", isExam2);
+          await sendNotificationLog(supabase, sPhone, mResult);
+          await sendNotificationLog(supabase, fPhone, mResult);
           continue;
         }
 
-        // نجاح في الاختبار الكلي للـ Exam
         if (tEval === "perfect" || tEval === "good") {
-          if (eType === "EXAM1") {
-            // الانتقال للاختبار التراكمي الثاني إذا كان مسجلاً ومفعلاً
-            if (s.exam2_active && s.exam2_teacher_id) {
+          countSuccessTest++;
+          logEntries.push({ studentName: fName, typeLabel: exLabel, resultLabel: "نجاح" });
+
+          if (!isExam2) {
+            // اجتياز الاختبار الجزئي الأول
+            const hasE2 = !!s.exam2_active;
+            if (hasE2) {
               await supabase.from("users_saves").update({ status: "IN_EXAM2" }).eq("id", s.id);
-              await updateSaveExamFields(supabase, s.id, "EXAM2", "PENDING", "PENDING");
+              const testDate = addDays(today, 2);
+              await supabase.from("users_pages_tests").insert([{
+                user_id: uid, save_id: s.id, teacher_id: s.exam2_teacher_id ?? tid,
+                teacher_name: s.exam2_teacher?.full_name ?? s.teacher.full_name,
+                status: "not_ready", page_status: "not_ready", type: "EXAM2",
+                start_page: s.start_page ?? 1, end_page: s.end_page ?? 604, date: testDate
+              }]);
             } else {
-              // انتهاء كافة الاختبارات بنجاح والعودة للحفظ أو الاكتمال النهائي
+              // نجح من الاختبار الأول وليس له اختبار ثانٍ تراكمي مطلقاً
               await supabase.from("users_saves").update({ status: "FINISHED" }).eq("id", s.id);
+              const mAdm = msgAdminExam1PassedNoExam2(sName, fName, isFU);
+              await sendNotificationLog(supabase, T.ADMIN, mAdm);
             }
           } else {
-            // اجتياز الاختبار التراكمي بنجاح تام
+            // اجتياز الاختبار التراكمي الثاني والنهائي بنجاح تام واكتمال الخطة كاملة
             await supabase.from("users_saves").update({ status: "FINISHED" }).eq("id", s.id);
+            const mAdm = msgAdminExam2Passed(sName, fName, isFU);
+            await sendNotificationLog(supabase, T.ADMIN, mAdm);
           }
+
+          const customPassedText = [
+            T.HEADER, T.SEP, `🎉 مبارك النتيجة المشرفة للطالب: *${fName}*`,
+            `📚 الحفظ: *${sName}*`, `🏅 نوع الاختبار: *${exLabel}*`,
+            `✨ النتيجة النهائية: *نجاح*`, T.SEP, ``, T.FOOTER
+          ].join("\n");
+          
+          await sendNotificationLog(supabase, sPhone, customPassedText);
+          await sendNotificationLog(supabase, fPhone, customPassedText);
         }
       }
     }
   }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  ثالثاً: توليد وإرسال الرسائل الإحصائية الإدارية الشاملة للـ Admins
+  // ════════════════════════════════════════════════════════════════════
+  
+  // بناء نص الرسالة الأولى: الإحصائيات والأرقام العامة بصيغ لغوية دقيقة
+  const msg1Lines = [
+    `إحصائيات (${today})`,
+    `النجاح في الحفظ: ${G.formatCountStudent(countSuccessSave)}`,
+    `النجاح في الإختبار: ${G.formatCountStudent(countSuccessTest)}`,
+    `الرسوب في الحفظ: ${G.formatCountStudent(countRejectSave)}`,
+    `الرسوب في الإختبار: ${G.formatCountStudent(countRejectTest)}`,
+    `المتقنين: ${G.formatCountStudent(countPerfectSave)}`,
+    `الإمتياز: ${G.formatCountStudent(countGoodSave)}`,
+    `عدد غيابات الطلاب الكلي: ${G.formatCountStudent(countAbsenceUser)}`,
+    `عدد غيابات المشرفيين الكلي: ${G.formatCountTeacher(countAbsenceTeacher)}`
+  ];
+
+  if (absentTeachersNames.length > 0) {
+    msg1Lines.push(`المشرفين: ${absentTeachersNames.join(" ، ")}`);
+  }
+
+  const finalAdminMessage1 = msg1Lines.join("\n");
+  await sendNotificationLog(supabase, T.ADMIN, finalAdminMessage1);
+
+  // بناء نص الرسالة الثانية: سجل بيانات الطلاب التفصيلي الشامل لكافة التعديلات
+  const msg2Lines = [`إحصائيات (${today}) لبيانات الطلاب:`];
+  
+  if (logEntries.length === 0) {
+    msg2Lines.push("لا يوجد أي تعديلات أو نشاطات مسجلة ومعدلة لهذا اليوم.");
+  } else {
+    for (const log of logEntries) {
+      msg2Lines.push(`${log.studentName} / ${log.typeLabel} / ${log.resultLabel}`);
+    }
+  }
+
+  const finalAdminMessage2 = msg2Lines.join("\n");
+  await sendNotificationLog(supabase, T.ADMIN, finalAdminMessage2);
+
+  console.log("[DAILY SYSTEM LOGS COMPLETED] All messages processed and archived successfully.");
 }

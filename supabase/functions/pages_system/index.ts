@@ -353,6 +353,53 @@ function msgExamSessionResult(saveName: string, fullName: string, isFU: boolean,
 }
 
 // ════════════════════════════════════════════════════════════════════
+//  إضافة أول صف حفظ للـ save_id الذي لا يملك أي صفوف في users_pages
+// ════════════════════════════════════════════════════════════════════
+async function initMissingPages(supabase: any, saves: any[], today: string) {
+  console.log("[initMissingPages] التحقق من الحفظات التي لا تملك صفوف...");
+
+  for (const s of saves) {
+    if (s.status !== "ACTIVE") continue;
+    if (!s.user || !s.teacher) continue;
+
+    // تحقق هل يوجد أي صف في users_pages لهذا الـ save_id
+    const { data: existingRows } = await supabase
+      .from("users_pages")
+      .select("id")
+      .eq("save_id", s.id)
+      .limit(1);
+
+    // إذا يوجد صف → تخطى
+    if (existingRows && existingRows.length > 0) continue;
+
+    // لا يوجد أي صف → احسب قيمة page الأولى
+    const currentPage   = s.current_page   ?? s.start_page ?? 1;
+    const everyDayPages = s.every_day_pages ?? 1;
+    const firstPage     = currentPage + everyDayPages;
+
+    // أضف الصف الأول بـ status و page_status = not_ready ولا تعالجه
+    const { error: insErr } = await supabase
+      .from("users_pages")
+      .insert([{
+        user_id      : s.user_id,
+        save_id      : s.id,
+        teacher_id   : s.teacher_id,
+        teacher_name : s.teacher.full_name,
+        page         : firstPage,
+        status       : "not_ready",
+        page_status  : "not_ready",
+        date         : today,
+      }]);
+
+    if (insErr) {
+      console.error(`[initMissingPages ERROR] save_id=${s.id}:`, insErr);
+    } else {
+      console.log(`[initMissingPages] أُضيف أول صف لـ save_id=${s.id} | user=${s.user.full_name} | page=${firstPage}`);
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
 //  الدالة المركزية والمحرك الأساسي للنظام
 // ════════════════════════════════════════════════════════════════════
 export async function handleDailySaves() {
@@ -394,6 +441,9 @@ export async function handleDailySaves() {
     console.error("[CRITICAL ERROR FETCHING SAVES]:", sErr);
     return;
   }
+
+  // ── تعديل: إضافة أول صف لأي save_id لا يملك صفوفاً في users_pages ──
+  await initMissingPages(supabase, saves, today);
 
   // بناء سياق الإجازات لليوم وللغد
   const { data: tomHolidays } = await supabase.from("holidays").select("*").eq("date", tomorrow);

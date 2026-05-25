@@ -14,12 +14,14 @@ jobs:
         with:
           version: latest
 
-      - run: |
-          supabase functions deploy pages_system --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
-          supabase functions deploy stuCHECK_LOGIN --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
-          supabase functions deploy stuCOMPLETE_PROFILE --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
-          supabase functions deploy stuLOGIN --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
-          supabase functions deploy stuOTP_REQUEST --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
-          supabase functions deploy stuREADY --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+      - name: Deploy all functions with no-verify-jwt
+        run: |
+          for dir in supabase/functions/*/; do
+            func=$(basename "$dir")
+            echo "Deploying $func..."
+            supabase functions deploy "$func" \
+              --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} \
+              --no-verify-jwt
+          done
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

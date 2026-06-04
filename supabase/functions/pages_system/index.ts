@@ -105,19 +105,25 @@ function convertPhone(p: string): string {
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  نظام المحاكاة والارسال للرسائل و قنوات الاتصال
+//  إرسال رسائل واتساب عبر WAHA
 // ════════════════════════════════════════════════════════════════════
-async function sendNotificationLog(supabase: any, phone: string, text: string) {
-  try {
-    if (!phone) return;
-    await supabase.from("notification_logs").insert([{
-      phone_number: convertPhone(phone),
-      message_text: text,
-      sent_at: new Date().toISOString()
-    }]);
-  } catch (e) {
-    console.error("[NOTIFICATION LOG ERROR]:", e);
-  }
+function makeWaha(wahaUrl: string, wahaApiKey: string) {
+  return async function waha(phone: string, text: string): Promise<void> {
+    if (!phone || !wahaUrl || !wahaApiKey) {
+      console.warn(`[WAHA] Skip phone="${convertPhone(phone)}"`);
+      return;
+    }
+    try {
+      const res = await fetch(wahaUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Api-Key": wahaApiKey },
+        body: JSON.stringify({ chatId: `${convertPhone(phone)}@c.us`, text, session: "default" }),
+      });
+      console.log(`[WAHA] → ${convertPhone(phone)} HTTP ${res.status}`);
+    } catch (err) {
+      console.error(`[WAHA] → ${convertPhone(phone)}:`, err);
+    }
+  };
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -374,7 +380,7 @@ async function initMissingPages(supabase: any, saves: any[], today: string) {
 
     // لا يوجد أي صف → احسب قيمة page الأولى
     const currentPage   = s.current_page   ?? s.start_page ?? 1;
-    const everyDayPages = s.every_day_pages ?? 1;
+    const everyDayPages = s.every_day_page ?? 1;
     const firstPage     = currentPage + everyDayPages;
 
     // أضف الصف الأول بـ status و page_status = not_ready ولا تعالجه
@@ -405,7 +411,12 @@ async function initMissingPages(supabase: any, saves: any[], today: string) {
 export async function handleDailySaves() {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const wahaUrl     = Deno.env.get("waha_url") ?? "";
+  const wahaApiKey  = Deno.env.get("waha_api_key") ?? "";
+  const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+  const waha = makeWaha(wahaUrl, wahaApiKey);
 
   const today = todayStr();
   const tomorrow = addDays(today, 1);
@@ -425,11 +436,11 @@ export async function handleDailySaves() {
   let countAbsenceUser = 0;
   let countAbsenceTeacher = 0;
 
-  // جلب كافة صفوف الحفظ المفتوحة والنشطة
+  // جلب كافة صفوف الحفظ المفتوحة والنشطة والموقوفة
   const { data: rawSaves, error: sErr } = await supabase
     .from("users_saves")
     .select("*")
-    .in("status", ["ACTIVE", "IN_EXAM1", "IN_EXAM2"]);
+    .in("status", ["ACTIVE", "IN_EXAM1", "IN_EXAM2", "SUSPENDED"]);
 
   if (sErr || !rawSaves) {
     console.error("[CRITICAL ERROR FETCHING SAVES]:", sErr);
@@ -468,16 +479,36 @@ export async function handleDailySaves() {
     const uid = s.user_id;
     const tid = s.teacher_id;
     const isFU = s.user.gender === "female";
-    const iFT = s.teacher.gender === "female";
-    const fName = s.user.full_name ?? "طالب";
-    const sName = s.name ?? "خطة الحفظ";
-    const fPhone = s.user.father_phone ?? "";
-    const sPhone = s.user.phone ?? "";
+    const iFT  = s.teacher.gender === "female";
+    const fName  = s.user.full_name ?? "طالب";
+    const sName  = s.name ?? "خطة الحفظ";
+    const fPhone = s.user.father_phone_number ?? "";
+    const sPhone = s.user.user_phone_number   ?? "";
+    const tPhone = s.teacher.phone_number     ?? "";
+    let   saveStatus = s.status as string;
+
+    // ─────────────────────────────────────────────────────────────────
+    //  معالجة الاستئناف: SUSPENDED → sus_to_act → استعادة الحالة السابقة
+    // ─────────────────────────────────────────────────────────────────
+    if (saveStatus === "SUSPENDED") {
+      const { data: lastP } = await supabase.from("users_pages")
+        .select("status").eq("save_id", s.id).order("id", { ascending: false }).limit(1);
+      const { data: lastT } = await supabase.from("users_pages_tests")
+        .select("status").eq("save_id", s.id).order("id", { ascending: false }).limit(1);
+
+      if (lastP?.[0]?.status === "sus_to_act" || lastT?.[0]?.status === "sus_to_act") {
+        const oldSt = String(s.old_status ?? "ACTIVE");
+        await supabase.from("users_saves").update({ status: oldSt, old_status: null }).eq("id", s.id);
+        saveStatus = oldSt;
+      } else {
+        continue;
+      }
+    }
 
     // ─────────────────────────────────────────────────────────────────
     //  أولاً: معالجة حالة الحفظ اليومي النشط (ACTIVE)
     // ─────────────────────────────────────────────────────────────────
-    if (s.status === "ACTIVE") {
+    if (saveStatus === "ACTIVE") {
       const { data: pageRow } = await supabase
         .from("users_pages")
         .select("*")
@@ -490,7 +521,7 @@ export async function handleDailySaves() {
       const pStatus = pageRow.status; // finished, user_absence, teacher_absence, holiday, public_holiday, teacher_holiday
       const pEval = pageRow.page_status; // perfect, good, reject, not_ready
       const pageNum = pageRow.page ?? 1;
-      const edp = s.every_day_pages ?? 1;
+      const edp = s.every_day_page ?? 1;
       const pageDisp = Array.from({ length: Math.ceil(edp) }, (_, i) => String(pageNum - (Math.ceil(edp) - 1 - i))).join(" و ");
 
       // أ. معالجة حالات الغيابات أو الإجازات لليوم الحالي
@@ -503,7 +534,7 @@ export async function handleDailySaves() {
             await supabase.from("users_saves").update({ status: "SUSPENDED", status_reason: "إيقاف بسبب الغياب المتكرر للحفظ" }).eq("id", s.id);
             // إرسال فوري للادارة بسبب الإيقاف بالغياب كما هو مطلوب بالشرط الأول للادارة
             const mAdm = msgAdminSuspension(sName, "absence", fName, isFU, fPhone);
-            await sendNotificationLog(supabase, T.ADMIN, mAdm);
+            await waha(T.ADMIN, mAdm);
             logEntries.push({ studentName: fName, typeLabel: "الحفظ اليومي", resultLabel: "غياب" });
             continue;
           }
@@ -525,8 +556,8 @@ export async function handleDailySaves() {
 
         const mSt = msgDailyAbsence(sName, pageDisp, today, tomorrow, isFU, false, pStatus);
         const mFa = msgDailyAbsence(sName, pageDisp, today, tomorrow, isFU, true, pStatus);
-        await sendNotificationLog(supabase, sPhone, mSt);
-        await sendNotificationLog(supabase, fPhone, mFa);
+        await waha(sPhone, mSt);
+        await waha(fPhone, mFa);
         continue;
       }
 
@@ -540,7 +571,7 @@ export async function handleDailySaves() {
           if (tripleRej.isTriple) {
             await supabase.from("users_saves").update({ status: "SUSPENDED", status_reason: "إيقاف بسبب الرسوب المتكرر في الحفظ" }).eq("id", s.id);
             const mAdm = msgAdminSuspension(sName, "reject", fName, isFU, fPhone);
-            await sendNotificationLog(supabase, T.ADMIN, mAdm);
+            await waha(T.ADMIN, mAdm);
             continue;
           }
 
@@ -552,8 +583,8 @@ export async function handleDailySaves() {
 
           const mSt = msgDailyFinishedReject(sName, pageDisp, pageRow.errors_number, isFU, false);
           const mFa = msgDailyFinishedReject(sName, pageDisp, pageRow.errors_number, isFU, true);
-          await sendNotificationLog(supabase, sPhone, mSt);
-          await sendNotificationLog(supabase, fPhone, mFa);
+          await waha(sPhone, mSt);
+          await waha(fPhone, mFa);
           continue;
         }
 
@@ -579,9 +610,9 @@ export async function handleDailySaves() {
                 start_page: s.start_page ?? 1, end_page: s.end_page ?? 604, date: testDate
               }]);
 
-              if (s.exam1_teacher?.phone) {
+              if (s.exam1_teacher?.phone_number) {
                 const mAss = msgExamDayTeacher(sName, fName, isFU, s.exam1_teacher.gender === "female", sPhone, false);
-                await sendNotificationLog(supabase, s.exam1_teacher.phone, mAss);
+                await waha(s.exam1_teacher.phone_number, mAss);
               }
             } else if (e2Active) {
               await supabase.from("users_saves").update({ status: "IN_EXAM2" }).eq("id", s.id);
@@ -596,11 +627,11 @@ export async function handleDailySaves() {
               // نجح وليس له أي اختبارات حالية مطلقة
               await supabase.from("users_saves").update({ status: "FINISHED" }).eq("id", s.id);
               const mAdm = msgAdminFinishedNoExams(sName, fName, isFU);
-              await sendNotificationLog(supabase, T.ADMIN, mAdm);
+              await waha(T.ADMIN, mAdm);
             }
 
             const mSt = msgStudentCompletion(sName, isFU, e1Active, s.exam1_teacher?.full_name ?? "", e2Active, s.exam1_teacher?.gender === "female");
-            await sendNotificationLog(supabase, sPhone, mSt);
+            await waha(sPhone, mSt);
             continue;
           } else {
             // الانتقال والمتابعة لصفحة الحفظ التالية في خطة التسميع اليومية المستمرة
@@ -613,8 +644,8 @@ export async function handleDailySaves() {
 
             const mSt = msgDailyFinished(sName, pageDisp, pEval, pageRow.errors_number, String(nextPage), isFU, false);
             const mFa = msgDailyFinished(sName, pageDisp, pEval, pageRow.errors_number, String(nextPage), isFU, true);
-            await sendNotificationLog(supabase, sPhone, mSt);
-            await sendNotificationLog(supabase, fPhone, mFa);
+            await waha(sPhone, mSt);
+            await waha(fPhone, mFa);
           }
         }
       }
@@ -623,9 +654,9 @@ export async function handleDailySaves() {
     // ─────────────────────────────────────────────────────────────────
     //  ثانياً: معالجة حالة الاختبارات الجزئية والتراكمية (EXAM1 / EXAM2)
     // ─────────────────────────────────────────────────────────────────
-    const isInExamMode = s.status === "IN_EXAM1" || s.status === "IN_EXAM2";
+    const isInExamMode = saveStatus === "IN_EXAM1" || saveStatus === "IN_EXAM2";
     if (isInExamMode) {
-      const isExam2 = s.status === "IN_EXAM2";
+      const isExam2 = saveStatus === "IN_EXAM2";
       const exType = isExam2 ? "EXAM2" : "EXAM1";
       const exLabel = isExam2 ? G.exam2Name : G.exam1Name;
       const currentExamTeacher = isExam2 ? s.exam2_teacher : s.exam1_teacher;
@@ -657,13 +688,13 @@ export async function handleDailySaves() {
             }]);
           }
 
-          const mSt = msgExamDayStudent(sName, isFU, currentExamTeacher.full_name, currentExamTeacher.phone ?? "", isExam2, iEFT);
+          const mSt = msgExamDayStudent(sName, isFU, currentExamTeacher.full_name, currentExamTeacher.phone_number ?? "", isExam2, iEFT);
           const mFa = msgExamDayGuardian(sName, fName, isFU, currentExamTeacher.full_name, isExam2, iEFT);
           const mTe = msgExamDayTeacher(sName, fName, isFU, iEFT, sPhone, isExam2);
 
-          await sendNotificationLog(supabase, sPhone, mSt);
-          await sendNotificationLog(supabase, fPhone, mFa);
-          if (currentExamTeacher.phone) await sendNotificationLog(supabase, currentExamTeacher.phone, mTe);
+          await waha(sPhone, mSt);
+          await waha(fPhone, mFa);
+          if (currentExamTeacher.phone_number) await waha(currentExamTeacher.phone_number, mTe);
         }
       }
 
@@ -689,7 +720,7 @@ export async function handleDailySaves() {
           if (tripleAbsTest.isTriple) {
             await supabase.from("users_saves").update({ status: "SUSPENDED", status_reason: `إيقاف بسبب الغياب المتكرر في ${exLabel}` }).eq("id", s.id);
             const mAdm = msgAdminSuspension(sName, "absence", fName, isFU, fPhone);
-            await sendNotificationLog(supabase, T.ADMIN, mAdm);
+            await waha(T.ADMIN, mAdm);
             logEntries.push({ studentName: fName, typeLabel: exLabel, resultLabel: "غياب" });
             continue;
           }
@@ -712,8 +743,8 @@ export async function handleDailySaves() {
 
         const variantKey = (tStatus === "user_absence" || tStatus === "teacher_absence") ? tStatus : "user_absence";
         const mResult = msgExamSessionResult(sName, fName, isFU, variantKey as any, isExam2);
-        await sendNotificationLog(supabase, sPhone, mResult);
-        await sendNotificationLog(supabase, fPhone, mResult);
+        await waha(sPhone, mResult);
+        await waha(fPhone, mResult);
         continue;
       }
 
@@ -726,7 +757,7 @@ export async function handleDailySaves() {
           if (tripleRejTest.isTriple) {
             await supabase.from("users_saves").update({ status: "SUSPENDED", status_reason: `إيقاف بسبب الرسوب المتكرر في ${exLabel}` }).eq("id", s.id);
             const mAdm = msgAdminSuspension(sName, "reject", fName, isFU, fPhone);
-            await sendNotificationLog(supabase, T.ADMIN, mAdm);
+            await waha(T.ADMIN, mAdm);
             continue;
           }
 
@@ -738,8 +769,8 @@ export async function handleDailySaves() {
           }]);
 
           const mResult = msgExamSessionResult(sName, fName, isFU, "reject", isExam2);
-          await sendNotificationLog(supabase, sPhone, mResult);
-          await sendNotificationLog(supabase, fPhone, mResult);
+          await waha(sPhone, mResult);
+          await waha(fPhone, mResult);
           continue;
         }
 
@@ -763,13 +794,13 @@ export async function handleDailySaves() {
               // نجح من الاختبار الأول وليس له اختبار ثانٍ تراكمي مطلقاً
               await supabase.from("users_saves").update({ status: "FINISHED" }).eq("id", s.id);
               const mAdm = msgAdminExam1PassedNoExam2(sName, fName, isFU);
-              await sendNotificationLog(supabase, T.ADMIN, mAdm);
+              await waha(T.ADMIN, mAdm);
             }
           } else {
             // اجتياز الاختبار التراكمي الثاني والنهائي بنجاح تام واكتمال الخطة كاملة
             await supabase.from("users_saves").update({ status: "FINISHED" }).eq("id", s.id);
             const mAdm = msgAdminExam2Passed(sName, fName, isFU);
-            await sendNotificationLog(supabase, T.ADMIN, mAdm);
+            await waha(T.ADMIN, mAdm);
           }
 
           const customPassedText = [
@@ -778,8 +809,8 @@ export async function handleDailySaves() {
             `✨ النتيجة النهائية: *نجاح*`, T.SEP, ``, T.FOOTER
           ].join("\n");
           
-          await sendNotificationLog(supabase, sPhone, customPassedText);
-          await sendNotificationLog(supabase, fPhone, customPassedText);
+          await waha(sPhone, customPassedText);
+          await waha(fPhone, customPassedText);
         }
       }
     }
@@ -807,7 +838,7 @@ export async function handleDailySaves() {
   }
 
   const finalAdminMessage1 = msg1Lines.join("\n");
-  await sendNotificationLog(supabase, T.ADMIN, finalAdminMessage1);
+  await waha(T.ADMIN, finalAdminMessage1);
 
   // بناء نص الرسالة الثانية: سجل بيانات الطلاب التفصيلي الشامل لكافة التعديلات
   const msg2Lines = [`إحصائيات (${today}) لبيانات الطلاب:`];
@@ -821,7 +852,7 @@ export async function handleDailySaves() {
   }
 
   const finalAdminMessage2 = msg2Lines.join("\n");
-  await sendNotificationLog(supabase, T.ADMIN, finalAdminMessage2);
+  await waha(T.ADMIN, finalAdminMessage2);
 
   console.log("[DAILY SYSTEM LOGS COMPLETED] All messages processed and archived successfully.");
 }
@@ -830,9 +861,10 @@ export async function handleDailySaves() {
 //  نقطة الدخول الرئيسية للـ Edge Function
 // ════════════════════════════════════════════════════════════════════
 Deno.serve(async (req: Request) => {
-  const apiKey    = req.headers.get("apikey") ?? "";
+  console.log("--- Pages System Function Started ---");
+
   const systemKey = Deno.env.get("system_key") ?? "";
-  if (!apiKey || apiKey !== systemKey) {
+  if (req.headers.get("system_key") !== systemKey) {
     return new Response(JSON.stringify({ error: true, errors: "غير مصرح" }), {
       status: 401,
       headers: { "Content-Type": "application/json" }

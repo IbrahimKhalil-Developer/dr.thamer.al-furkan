@@ -816,6 +816,15 @@ export async function handleDailySaves() {
 //  نقطة الدخول الرئيسية للـ Edge Function
 // ════════════════════════════════════════════════════════════════════
 Deno.serve(async (req: Request) => {
+  const apiKey    = req.headers.get("apikey") ?? "";
+  const systemKey = Deno.env.get("system_key") ?? "";
+  if (!apiKey || apiKey !== systemKey) {
+    return new Response(JSON.stringify({ error: true, errors: "غير مصرح" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: true, errors: "الطريقة غير مسموح بها" }), {
       status: 405,

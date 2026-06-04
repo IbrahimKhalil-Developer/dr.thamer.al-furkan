@@ -425,22 +425,36 @@ export async function handleDailySaves() {
   let countAbsenceUser = 0;
   let countAbsenceTeacher = 0;
 
-  // جلب كافة صفوف الحفظ المفتوحة والنشطة والواقعة تحت قيد الاختبار المجدول
-  const { data: saves, error: sErr } = await supabase
+  // جلب كافة صفوف الحفظ المفتوحة والنشطة
+  const { data: rawSaves, error: sErr } = await supabase
     .from("users_saves")
-    .select(`
-      *,
-      user:users!user_id(*),
-      teacher:teachers!teacher_id(*),
-      exam1_teacher:teachers!exam1_teacher_id(*),
-      exam2_teacher:teachers!exam2_teacher_id(*)
-    `)
+    .select("*")
     .in("status", ["ACTIVE", "IN_EXAM1", "IN_EXAM2"]);
 
-  if (sErr || !saves) {
+  if (sErr || !rawSaves) {
     console.error("[CRITICAL ERROR FETCHING SAVES]:", sErr);
     return;
   }
+
+  // جلب المستخدمين والمعلمين بشكل منفصل وربطهم يدوياً
+  const userIds    = [...new Set(rawSaves.map((s: any) => s.user_id).filter(Boolean))];
+  const teacherIds = [...new Set(rawSaves.flatMap((s: any) => [s.teacher_id, s.exam1_teacher_id, s.exam2_teacher_id]).filter(Boolean))];
+
+  const { data: usersData }    = await supabase.from("users").select("*").in("user_id", userIds);
+  const { data: teachersData } = await supabase.from("teachers").select("*").in("teacher_id", teacherIds);
+
+  const usersMap:    Record<string, any> = {};
+  const teachersMap: Record<string, any> = {};
+  for (const u of usersData    ?? []) usersMap[String(u.user_id)]       = u;
+  for (const t of teachersData ?? []) teachersMap[String(t.teacher_id)] = t;
+
+  const saves = rawSaves.map((s: any) => ({
+    ...s,
+    user:           usersMap[String(s.user_id)]               ?? null,
+    teacher:        teachersMap[String(s.teacher_id)]          ?? null,
+    exam1_teacher:  s.exam1_teacher_id ? teachersMap[String(s.exam1_teacher_id)] ?? null : null,
+    exam2_teacher:  s.exam2_teacher_id ? teachersMap[String(s.exam2_teacher_id)] ?? null : null,
+  }));
 
   // ── تعديل: إضافة أول صف لأي save_id لا يملك صفوفاً في users_pages ──
   await initMissingPages(supabase, saves, today);

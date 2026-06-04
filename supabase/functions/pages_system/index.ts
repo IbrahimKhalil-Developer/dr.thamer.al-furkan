@@ -811,3 +811,29 @@ export async function handleDailySaves() {
 
   console.log("[DAILY SYSTEM LOGS COMPLETED] All messages processed and archived successfully.");
 }
+
+// ════════════════════════════════════════════════════════════════════
+//  نقطة الدخول الرئيسية للـ Edge Function
+// ════════════════════════════════════════════════════════════════════
+Deno.serve(async (req: Request) => {
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: true, errors: "الطريقة غير مسموح بها" }), {
+      status: 405,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
+  try {
+    await handleDailySaves();
+    return new Response(JSON.stringify({ error: false, message: "تمت معالجة النظام اليومي بنجاح." }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  } catch (e) {
+    console.error("[HANDLER ERROR]:", e);
+    return new Response(JSON.stringify({ error: true, errors: "حدث خطأ أثناء تشغيل النظام." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+});

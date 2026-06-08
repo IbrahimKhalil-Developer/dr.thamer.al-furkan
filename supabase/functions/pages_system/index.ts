@@ -86,6 +86,7 @@ const G = {
   notEval   : () =>              "لم يتم التقييم",
   perfect   : (f:boolean) => f ? "مُتقنةٌ"           : "مُتقنٌ",
   good      : () =>              "إمتياز",
+  veryGood  : () =>              "جيد جداً",
   rejectDay : (tomorrow:boolean) =>
     `رسوبٌ — يُعاد التسميع ${tomorrow ? "بعد غدٍ" : "ليوم غدٍ"}`,
   rejectDayExam: (tomorrow:boolean) =>
@@ -192,6 +193,7 @@ function translateResult(status: string, pageStatus: string, isFU: boolean, iFT:
   if (status === "ready" || status === "teacher_absence")  return iFT ? "المشرفة غائبة" : "المشرف غائب";
   if (status === "finished" && pageStatus === "reject")    return "رسوب";
   if (status === "finished" && pageStatus === "good")      return "إمتياز";
+  if (status === "finished" && pageStatus === "very_good") return "جيد جداً";
   if (status === "finished" && pageStatus === "perfect")   return isFU ? "مُتقِنة" : "مُتقِن";
   if (status === "holiday")        return isFU ? "مجازة" : "مجاز";
   if (status === "public_holiday") return "إجازة عامة";
@@ -222,7 +224,7 @@ async function checkTriple(
     const st = String(r.status ?? ""); const pst = String(r.page_status ?? "");
     if (SKIP_ST.has(st) && st !== "user_absence") continue;
     if (st === "sus_to_act") break;
-    if (st === "finished" && (pst === "good" || pst === "perfect")) break;
+    if (st === "finished" && (pst === "good" || pst === "perfect" || pst === "very_good")) break;
     if (kind === "reject" && st === "finished" && pst === "reject") {
       cnt++; dates.push(String(r.date ?? "").split("T")[0]); if (cnt >= 3) return { isTriple: true, dates };
       continue;
@@ -364,9 +366,10 @@ function msgFinished(
 ): string {
   const nameLbl = forFather ? G.guardian(isFU) : G.student(isFU);
   let rLbl: string; let rEmoji: string;
-  if      (ps === "perfect") { rLbl = G.perfect(isFU);            rEmoji = "🌟"; }
-  else if (ps === "good")    { rLbl = G.good();                   rEmoji = "✅"; }
-  else                       { rLbl = G.rejectDay(tomorrowIsHol); rEmoji = "❌"; }
+  if      (ps === "perfect")   { rLbl = G.perfect(isFU);            rEmoji = "🌟"; }
+  else if (ps === "good")      { rLbl = G.good();                   rEmoji = "✅"; }
+  else if (ps === "very_good") { rLbl = G.veryGood();               rEmoji = "✅"; }
+  else                         { rLbl = G.rejectDay(tomorrowIsHol); rEmoji = "❌"; }
   const lines = [
     ...hdr(nameLbl, fullName), T.SEP,
     `📚 الحفظ:       *${saveName}*`,
@@ -647,9 +650,10 @@ function msgExamSessionFinished(
   const examLabel = examType === "EXAM2" ? "الاختبار التراكمي" : "اختبار الحفظ";
   const nameLbl   = target === "father" ? G.guardian(isFU) : G.student(isFU);
   let rLbl: string; let rEmoji: string;
-  if      (ps === "perfect") { rLbl = G.perfect(isFU);        rEmoji = "🌟"; }
-  else if (ps === "good")    { rLbl = G.good();               rEmoji = "✅"; }
-  else                       { rLbl = G.rejectDayExam(false); rEmoji = "❌"; }
+  if      (ps === "perfect")   { rLbl = G.perfect(isFU);        rEmoji = "🌟"; }
+  else if (ps === "good")      { rLbl = G.good();               rEmoji = "✅"; }
+  else if (ps === "very_good") { rLbl = G.veryGood();           rEmoji = "✅"; }
+  else                         { rLbl = G.rejectDayExam(false); rEmoji = "❌"; }
   return [
     ...hdr(nameLbl, fullName), T.SEP,
     `📚 الحفظ:       *${saveName}*`,
@@ -1132,7 +1136,7 @@ Deno.serve(async (req: Request) => {
           if (sendStudent && studentMsg) await waha(user.user_phone_number, studentMsg);
 
           const isProgress = lastStatus === "finished"
-            && (lastRow.page_status === "good" || lastRow.page_status === "perfect")
+            && (lastRow.page_status === "good" || lastRow.page_status === "perfect" || lastRow.page_status === "very_good")
             && nextPageToAdd > lastPage;
           const mePageArabic = isProgress
             ? buildPageDisplay(nextPageToAdd, edp)
@@ -1246,7 +1250,7 @@ Deno.serve(async (req: Request) => {
               readyAt: fmtBaghdadTime(lastTest.ready_at), finishedAt: fmtBaghdadTime(lastTest.finished_at),
               studentPhone: convertPhone(user.user_phone_number ?? ""), teacherPhone: convertPhone(ePhone) });
 
-            if (ltPageSt === "good" || ltPageSt === "perfect") {
+            if (ltPageSt === "good" || ltPageSt === "perfect" || ltPageSt === "very_good") {
               await updateSaveExamFields(supabase, saveId, eType, "finished", ltPageSt);
               if (eType === "EXAM1") {
                 const e2Req = saveRow.exam2 === true;

@@ -52,6 +52,30 @@ function formatDate(dateStr: string | null): string {
   return dateStr.split('T')[0];
 }
 
+function formatRequestDate(dateStr: string | null): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  const bd = new Date(date.getTime() + (3 * 60 * 60 * 1000));
+  const month = bd.getUTCMonth() + 1;
+  const day   = bd.getUTCDate();
+  let h = bd.getUTCHours();
+  const m = bd.getUTCMinutes();
+  const ampm = h >= 12 ? 'م' : 'ص';
+  h = h % 12 || 12;
+  return `${month}/${day} ${h}:${m < 10 ? '0' + m : m}${ampm}`;
+}
+
+function deepNullToEmpty(val: any): any {
+  if (val === null) return "";
+  if (Array.isArray(val)) return val.map(deepNullToEmpty);
+  if (typeof val === "object" && val !== undefined) {
+    const result: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) result[k] = deepNullToEmpty(v);
+    return result;
+  }
+  return val;
+}
+
 function calcExamInfo(examDateStr: string | null, examType: "جزئي" | "تراكمي"): { exam_started: boolean; exam_time_text: string } {
   if (!examDateStr) return { exam_started: false, exam_time_text: "" };
 
@@ -164,6 +188,12 @@ Deno.serve(async (req: Request) => {
     .eq('user_id', userId)
     .order('id', { ascending: true });
 
+  const { data: userRequestsRaw } = await supabaseAdmin
+    .from('users_requests')
+    .select('*')
+    .eq('send_user_id', userId)
+    .order('id', { ascending: true });
+
   // ── 4. معالجة البيانات ───────────────────────────────────────────
   const processedPages = (userPagesRaw || []).map(p => {
     const { teacher_photo, is_45min_requested, ...rest } = p;
@@ -189,6 +219,12 @@ Deno.serve(async (req: Request) => {
       date: formatDate(t.date)
     };
   });
+
+  const processedRequests = (userRequestsRaw || []).map(r => ({
+    ...r,
+    send_date    : formatRequestDate(r.send_date),
+    replayed_date: formatRequestDate(r.replayed_date),
+  }));
 
   // ── 5. information ───────────────────────────────────────────────
   let infoStatus = "";
@@ -352,7 +388,10 @@ Deno.serve(async (req: Request) => {
     };
   }
 
-  return new Response(JSON.stringify(responsePayload), {
+  responsePayload.requests = processedRequests;
+
+  const finalPayload = deepNullToEmpty(responsePayload);
+  return new Response(JSON.stringify(finalPayload), {
     headers: { 'Content-Type': 'application/json' },
     status: 200,
   });

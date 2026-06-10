@@ -54,6 +54,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
                                                                               .from("users_saves")
                                                                                   .select("status")
                                                                                       .eq("id", currentSaveId)
+                                                                                          .eq("user_id", userId)
                                                                                           .single();
 
                                                                                             if (saveError || !savePlan) return errorResponse("فشل الإستعداد يرجى التواصل مع إدارة المركز", 404);
@@ -77,7 +78,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
                                                                                                                                       }
 
                                                                                                                                         // جلب آخر صف في الجدول المستهدف
-                                                                                                                                          let query = supabaseAdmin.from(targetTable).select("*").eq("save_id", currentSaveId);
+                                                                                                                                          let query = supabaseAdmin.from(targetTable).select("*").eq("user_id", userId).eq("save_id", currentSaveId);
                                                                                                                                             if (targetTable === "users_pages_tests") {
                                                                                                                                                 query = query.eq("type", queryFilter.type);
                                                                                                                                                   }
@@ -87,7 +88,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
                                                                                                                                                               .limit(1);
 
                                                                                                                                                                 if (lastRowError || !lastRows || lastRows.length === 0) {
-                                                                                                                                                                    return errorResponse("لا يوجد حفظ للإستعداد", 404);
+                                                                                                                                                                    return errorResponse("لا يمكن الإستعداد لم يتم إضافة حفظ أو الحفظ في مرحلة الإعداد", 404);
                                                                                                                                                                       }
 
                                                                                                                                                                         const lastRow = lastRows[0];

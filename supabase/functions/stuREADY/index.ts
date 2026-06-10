@@ -87,7 +87,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
                                                                                                                                                               .limit(1);
 
                                                                                                                                                                 if (lastRowError || !lastRows || lastRows.length === 0) {
-                                                                                                                                                                    return errorResponse("فشل الإستعداد يرجى التواصل مع إدارة المركز", 404);
+                                                                                                                                                                    return errorResponse("لا يوجد حفظ للإستعداد", 404);
                                                                                                                                                                       }
 
                                                                                                                                                                         const lastRow = lastRows[0];

@@ -76,6 +76,12 @@ function deepNullToEmpty(val: any): any {
   return val;
 }
 
+function jsonResponse(payload: any, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status, headers: { "Content-Type": "application/json" },
+  });
+}
+
 function calcExamInfo(examDateStr: string | null, examType: "جزئي" | "تراكمي"): { exam_started: boolean; exam_time_text: string } {
   if (!examDateStr) return { exam_started: false, exam_time_text: "" };
 
@@ -115,6 +121,34 @@ Deno.serve(async (req: Request) => {
     body = await req.json();
   } catch {
     return new Response(JSON.stringify({ error: true, errors: 'بيانات غير صالحة' }), { status: 400 });
+  }
+
+  // ── 0. فحص الإصدار (version) — أول خطوة قبل أي تحقق ──────────────
+  const { version } = body;
+  if (!version) {
+    return jsonResponse({ error: true, errors: 'يجب إرسال إصدار التطبيق' }, 400);
+  }
+
+  const { data: updateRow, error: updateErr } = await supabaseAdmin
+    .from('updates')
+    .select('*')
+    .eq('version_number', version)
+    .maybeSingle();
+
+  if (updateErr || !updateRow) {
+    return jsonResponse({ error: true, errors: 'هذا الإصدار غير مدعوم، يرجى تحديث التطبيق' }, 426);
+  }
+
+  if (updateRow.update === true) {
+    return jsonResponse({
+      error: false,
+      update: true,
+      title:         updateRow.title         ?? "",
+      message:       updateRow.message       ?? "",
+      ok_button:     updateRow.ok_button     ?? "",
+      cancel_button: updateRow.cancel_button ?? "",
+      url:           updateRow.url           ?? "",
+    }, 200);
   }
 
   const { access_token, refresh_token } = body;
@@ -389,10 +423,8 @@ Deno.serve(async (req: Request) => {
   }
 
   responsePayload.requests = processedRequests;
+  responsePayload.update = false;
 
   const finalPayload = deepNullToEmpty(responsePayload);
-  return new Response(JSON.stringify(finalPayload), {
-    headers: { 'Content-Type': 'application/json' },
-    status: 200,
-  });
+  return jsonResponse(finalPayload, 200);
 });

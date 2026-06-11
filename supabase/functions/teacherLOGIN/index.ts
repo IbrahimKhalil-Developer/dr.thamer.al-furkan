@@ -16,6 +16,16 @@ function jsonResponse(payload: any, status = 200): Response {
   });
 }
 
+async function enrichWithPhoto(student: any): Promise<any> {
+  const { _rawPhoto, ...rest } = student;
+  if (!_rawPhoto) return rest;
+  const { data } = await supabaseAdmin.storage
+    .from("male_profiles_pictures")
+    .createSignedUrl(_rawPhoto, 60);
+  if (data?.signedUrl) return { ...rest, photo_url: data.signedUrl };
+  return rest;
+}
+
 function normalizePhone(p: string): string {
   const s = String(p ?? "").trim();
   if (s.startsWith("0")) return "964" + s.slice(1);
@@ -110,7 +120,7 @@ Deno.serve(async (req: Request) => {
     // كل المستخدمين (أعمدة ضرورية فقط)
     supabaseAdmin
       .from("users")
-      .select("user_id, full_name, gender, save_id"),
+      .select("user_id, full_name, gender, save_id, photo_url"),
 
     // آخر صف لكل user_id في users_pages_tests (أعمدة ضرورية فقط)
     supabaseAdmin
@@ -128,13 +138,14 @@ Deno.serve(async (req: Request) => {
   );
 
   // ── my_students ───────────────────────────────────────────────────
-  const myStudents = (usersResult.data ?? [])
+  const myStudentsRaw = (usersResult.data ?? [])
     .filter((u: any) => u.save_id && teacherSaveIds.has(u.save_id))
     .map((u: any) => ({
       user_id    : u.user_id   ?? "",
       full_name  : u.full_name ?? "",
       gender     : u.gender    ?? "",
       now_save_id: u.save_id   ?? "",
+      _rawPhoto  : u.gender === "male" ? (u.photo_url ?? "") : "",
     }));
 
   // ── taklif_students ───────────────────────────────────────────────
@@ -145,18 +156,24 @@ Deno.serve(async (req: Request) => {
     if (!lastRowPerUser.has(uid)) lastRowPerUser.set(uid, row);
   }
 
-  const taklifStudents = [...lastRowPerUser.values()]
+  const taklifStudentsRaw = [...lastRowPerUser.values()]
     .filter((r: any) => String(r.teacher_id) === teacherId)
     .map((r: any) => {
       const u = userMap.get(String(r.user_id)) ?? {};
       return {
-        exam_row_id: r.id              ?? "",
-        user_id    : r.user_id         ?? "",
-        full_name  : (u as any).full_name  ?? "",
-        gender     : (u as any).gender     ?? "",
-        now_save_id: (u as any).save_id    ?? "",
+        exam_row_id: r.id                 ?? "",
+        user_id    : r.user_id            ?? "",
+        full_name  : (u as any).full_name ?? "",
+        gender     : (u as any).gender    ?? "",
+        now_save_id: (u as any).save_id   ?? "",
+        _rawPhoto  : (u as any).gender === "male" ? ((u as any).photo_url ?? "") : "",
       };
     });
+
+  const [myStudents, taklifStudents] = await Promise.all([
+    Promise.all(myStudentsRaw.map(enrichWithPhoto)),
+    Promise.all(taklifStudentsRaw.map(enrichWithPhoto)),
+  ]);
 
   // ── الرد ─────────────────────────────────────────────────────────
   return jsonResponse({

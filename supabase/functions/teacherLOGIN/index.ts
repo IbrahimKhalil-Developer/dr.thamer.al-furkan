@@ -89,85 +89,76 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: true, errors: "رقم الهاتف أو كلمة السر غير صحيحة" }, 401);
   }
 
-  // ── 6. تحديث joined إذا كان أول دخول ────────────────────────────
-  if (!teacher.joined) {
-    await supabaseAdmin
-      .from("teachers")
-      .update({ joined: true, joined_in: new Date().toISOString() })
-      .eq("teacher_id", teacher.teacher_id);
-  }
-
+  // ── 6. تحديث joined + جلب البيانات (كلها بالتوازي) ─────────────
   const teacherId = String(teacher.teacher_id);
 
-  // ── 7. my_students — طلاب المشرف الحالي ─────────────────────────
-  // جلب كل الـ save_ids التابعة لهذا المشرف
-  const { data: teacherSaves } = await supabaseAdmin
-    .from("users_saves")
-    .select("id")
-    .eq("teacher_id", teacherId);
+  const [, savesResult, usersResult, testsResult] = await Promise.all([
+    // تحديث joined إذا كان أول دخول (fire-and-forget مع الباقي)
+    teacher.joined
+      ? Promise.resolve()
+      : supabaseAdmin
+          .from("teachers")
+          .update({ joined: true, joined_in: new Date().toISOString() })
+          .eq("teacher_id", teacherId),
 
-  const teacherSaveIds = new Set((teacherSaves ?? []).map((s: any) => s.id));
+    // save_ids التابعة لهذا المشرف
+    supabaseAdmin
+      .from("users_saves")
+      .select("id")
+      .eq("teacher_id", teacherId),
 
-  // جلب كل المستخدمين وتصفية من يملك save_id تابع لهذا المشرف
-  const { data: allUsers } = await supabaseAdmin
-    .from("users")
-    .select("user_id, full_name, gender, save_id");
+    // كل المستخدمين (أعمدة ضرورية فقط)
+    supabaseAdmin
+      .from("users")
+      .select("user_id, full_name, gender, save_id"),
 
-  const myStudents = (allUsers ?? [])
+    // آخر صف لكل user_id في users_pages_tests (أعمدة ضرورية فقط)
+    supabaseAdmin
+      .from("users_pages_tests")
+      .select("id, user_id, teacher_id")
+      .order("id", { ascending: false }),
+  ]);
+
+  // ── بناء الهياكل المساعدة (O(n) في الذاكرة) ─────────────────────
+  const teacherSaveIds = new Set((savesResult.data ?? []).map((s: any) => s.id));
+
+  // userMap مشترك لـ my_students و taklif_students — يُبنى مرة واحدة
+  const userMap = new Map<string, any>(
+    (usersResult.data ?? []).map((u: any) => [String(u.user_id), u])
+  );
+
+  // ── my_students ───────────────────────────────────────────────────
+  const myStudents = (usersResult.data ?? [])
     .filter((u: any) => u.save_id && teacherSaveIds.has(u.save_id))
     .map((u: any) => ({
-      user_id    : u.user_id    ?? "",
-      full_name  : u.full_name  ?? "",
-      gender     : u.gender     ?? "",
-      now_save_id: u.save_id    ?? "",
+      user_id    : u.user_id   ?? "",
+      full_name  : u.full_name ?? "",
+      gender     : u.gender    ?? "",
+      now_save_id: u.save_id   ?? "",
     }));
 
-  // ── 8. taklif_students — طلاب الاختبار المكلَّف بهم ─────────────
-  // جلب كل صفوف users_pages_tests مرتبة تنازلياً للحصول على آخر صف لكل user_id
-  const { data: allTests } = await supabaseAdmin
-    .from("users_pages_tests")
-    .select("id, user_id, teacher_id")
-    .order("id", { ascending: false });
-
-  // آخر صف لكل user_id
+  // ── taklif_students ───────────────────────────────────────────────
+  // آخر صف لكل user_id (الأول بالترتيب التنازلي = الأحدث)
   const lastRowPerUser = new Map<string, any>();
-  for (const row of allTests ?? []) {
+  for (const row of testsResult.data ?? []) {
     const uid = String(row.user_id);
     if (!lastRowPerUser.has(uid)) lastRowPerUser.set(uid, row);
   }
 
-  // تصفية: آخر صف فيه teacher_id = teacherId
-  const taklifRows = [...lastRowPerUser.values()].filter(
-    (r: any) => String(r.teacher_id) === teacherId
-  );
-
-  // جلب بيانات المستخدمين المرتبطين
-  const taklifUserIds = taklifRows.map((r: any) => r.user_id);
-  let taklifStudents: any[] = [];
-
-  if (taklifUserIds.length > 0) {
-    const { data: taklifUsers } = await supabaseAdmin
-      .from("users")
-      .select("user_id, full_name, gender, save_id")
-      .in("user_id", taklifUserIds);
-
-    const taklifUserMap = new Map(
-      (taklifUsers ?? []).map((u: any) => [String(u.user_id), u])
-    );
-
-    taklifStudents = taklifRows.map((r: any) => {
-      const u = taklifUserMap.get(String(r.user_id)) ?? {};
+  const taklifStudents = [...lastRowPerUser.values()]
+    .filter((r: any) => String(r.teacher_id) === teacherId)
+    .map((r: any) => {
+      const u = userMap.get(String(r.user_id)) ?? {};
       return {
-        exam_row_id: r.id          ?? "",
-        user_id    : r.user_id     ?? "",
+        exam_row_id: r.id              ?? "",
+        user_id    : r.user_id         ?? "",
         full_name  : (u as any).full_name  ?? "",
         gender     : (u as any).gender     ?? "",
         now_save_id: (u as any).save_id    ?? "",
       };
     });
-  }
 
-  // ── 9. الرد ──────────────────────────────────────────────────────
+  // ── الرد ─────────────────────────────────────────────────────────
   return jsonResponse({
     error: false,
     update: false,

@@ -97,7 +97,77 @@ Deno.serve(async (req: Request) => {
       .eq("teacher_id", teacher.teacher_id);
   }
 
-  // ── 7. الرد ──────────────────────────────────────────────────────
+  const teacherId = String(teacher.teacher_id);
+
+  // ── 7. my_students — طلاب المشرف الحالي ─────────────────────────
+  // جلب كل الـ save_ids التابعة لهذا المشرف
+  const { data: teacherSaves } = await supabaseAdmin
+    .from("users_saves")
+    .select("id")
+    .eq("teacher_id", teacherId);
+
+  const teacherSaveIds = new Set((teacherSaves ?? []).map((s: any) => s.id));
+
+  // جلب كل المستخدمين وتصفية من يملك save_id تابع لهذا المشرف
+  const { data: allUsers } = await supabaseAdmin
+    .from("users")
+    .select("user_id, full_name, gender, save_id");
+
+  const myStudents = (allUsers ?? [])
+    .filter((u: any) => u.save_id && teacherSaveIds.has(u.save_id))
+    .map((u: any) => ({
+      user_id    : u.user_id    ?? "",
+      full_name  : u.full_name  ?? "",
+      gender     : u.gender     ?? "",
+      now_save_id: u.save_id    ?? "",
+    }));
+
+  // ── 8. taklif_students — طلاب الاختبار المكلَّف بهم ─────────────
+  // جلب كل صفوف users_pages_tests مرتبة تنازلياً للحصول على آخر صف لكل user_id
+  const { data: allTests } = await supabaseAdmin
+    .from("users_pages_tests")
+    .select("id, user_id, teacher_id")
+    .order("id", { ascending: false });
+
+  // آخر صف لكل user_id
+  const lastRowPerUser = new Map<string, any>();
+  for (const row of allTests ?? []) {
+    const uid = String(row.user_id);
+    if (!lastRowPerUser.has(uid)) lastRowPerUser.set(uid, row);
+  }
+
+  // تصفية: آخر صف فيه teacher_id = teacherId
+  const taklifRows = [...lastRowPerUser.values()].filter(
+    (r: any) => String(r.teacher_id) === teacherId
+  );
+
+  // جلب بيانات المستخدمين المرتبطين
+  const taklifUserIds = taklifRows.map((r: any) => r.user_id);
+  let taklifStudents: any[] = [];
+
+  if (taklifUserIds.length > 0) {
+    const { data: taklifUsers } = await supabaseAdmin
+      .from("users")
+      .select("user_id, full_name, gender, save_id")
+      .in("user_id", taklifUserIds);
+
+    const taklifUserMap = new Map(
+      (taklifUsers ?? []).map((u: any) => [String(u.user_id), u])
+    );
+
+    taklifStudents = taklifRows.map((r: any) => {
+      const u = taklifUserMap.get(String(r.user_id)) ?? {};
+      return {
+        exam_row_id: r.id          ?? "",
+        user_id    : r.user_id     ?? "",
+        full_name  : (u as any).full_name  ?? "",
+        gender     : (u as any).gender     ?? "",
+        now_save_id: (u as any).save_id    ?? "",
+      };
+    });
+  }
+
+  // ── 9. الرد ──────────────────────────────────────────────────────
   return jsonResponse({
     error: false,
     update: false,
@@ -109,5 +179,7 @@ Deno.serve(async (req: Request) => {
       full_name:  teacher.full_name  ?? "",
       teacher_id: teacher.teacher_id ?? "",
     },
+    my_students    : myStudents,
+    taklif_students: taklifStudents,
   }, 200);
 });

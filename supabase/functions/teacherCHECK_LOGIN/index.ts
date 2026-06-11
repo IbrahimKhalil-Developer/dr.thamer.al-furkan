@@ -58,34 +58,34 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── 3. التحقق من التوكن (access أولاً، ثم refresh) ──────────────
-  let userId: string;
+  let authEmail: string;
   let finalAccessToken  = access_token  as string;
   let finalRefreshToken = refresh_token as string;
 
   const { data: userData, error: userError } =
     await supabaseAuth.auth.getUser(access_token);
 
-  if (!userError && userData?.user) {
-    userId = userData.user.id;
+  if (!userError && userData?.user?.email) {
+    authEmail = userData.user.email;
   } else {
     // access_token انتهت صلاحيته — نجرب refresh
     const { data: refreshData, error: refreshError } =
       await supabaseAuth.auth.refreshSession({ refresh_token });
 
-    if (refreshError || !refreshData?.session) {
+    if (refreshError || !refreshData?.session?.user?.email) {
       return jsonResponse({ error: true, errors: "انتهت الجلسة، يرجى تسجيل الدخول مجدداً" }, 401);
     }
 
-    userId            = refreshData.session.user.id;
+    authEmail         = refreshData.session.user.email;
     finalAccessToken  = refreshData.session.access_token;
     finalRefreshToken = refreshData.session.refresh_token;
   }
 
-  // ── 4. البحث عن المشرف في جدول teachers ─────────────────────────
+  // ── 4. البحث عن المشرف في جدول teachers بالإيميل ────────────────
   const { data: teacher, error: teacherErr } = await supabaseAdmin
     .from("teachers")
     .select("teacher_id, full_name, joined, joined_in")
-    .eq("teacher_id", userId)
+    .eq("email", authEmail)
     .maybeSingle();
 
   if (teacherErr || !teacher) {

@@ -84,7 +84,7 @@ Deno.serve(async (req: Request) => {
   // ── 4. البحث عن المشرف في جدول teachers بالإيميل ────────────────
   const { data: teacher, error: teacherErr } = await supabaseAdmin
     .from("teachers")
-    .select("teacher_id, full_name, joined, joined_in")
+    .select("teacher_id, full_name, joined, joined_in, gender")
     .eq("email", authEmail)
     .maybeSingle();
 
@@ -170,6 +170,7 @@ Deno.serve(async (req: Request) => {
     user: {
       full_name:  teacher.full_name  ?? "",
       teacher_id: teacher.teacher_id ?? "",
+      gender:     teacher.gender     ?? "",
     },
     my_students    : myStudents,
     taklif_students: taklifStudents,

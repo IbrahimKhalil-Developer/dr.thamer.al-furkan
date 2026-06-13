@@ -65,7 +65,7 @@ Deno.serve(async (req: Request) => {
   // ── 4. جلب صف الحفظة من users_saves ─────────────────────────────
   const { data: saveRow, error: saveErr } = await supabaseAdmin
     .from("users_saves")
-    .select("id, user_id, teacher_id, status, name, teacher_name, exam1_teacher_name, exam2_teacher_name, start_page, end_page, current_page, every_day_page, started_at, exam1, exam2")
+    .select("id, user_id, teacher_id, status, name, teacher_name, exam1_teacher_name, exam2_teacher_name, start_page, end_page, page_current, every_day_page, started_at, exam1, exam2")
     .eq("id", now_save_id)
     .maybeSingle();
 
@@ -98,7 +98,7 @@ Deno.serve(async (req: Request) => {
       exam2_teacher_name : saveRow.exam2_teacher_name  ?? "",
       start_page         : saveRow.start_page          ?? "",
       end_page           : saveRow.end_page            ?? "",
-      current_page       : saveRow.current_page        ?? "",
+      current_page       : saveRow.page_current        ?? "",
       every_day_page     : saveRow.every_day_page      ?? "",
       started_at         : saveRow.started_at          ?? "",
       exam1              : saveRow.exam1               ?? "",

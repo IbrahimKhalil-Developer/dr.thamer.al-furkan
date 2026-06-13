@@ -88,17 +88,18 @@ Deno.serve(async (req: Request) => {
   // ── 5. جلب جميع حفظات الطالب ─────────────────────────────────────
   const { data: allSaves } = await supabaseAdmin
     .from("users_saves")
-    .select("id, name, start_page, end_page, teacher_name, status")
+    .select("id, name, start_page, end_page, teacher_name, every_day_page, started_at")
     .eq("user_id", user_id)
     .order("id", { ascending: true });
 
   const history = (allSaves ?? []).map((s: any) => ({
-    name        : s.name         ?? "",
-    start_page  : s.start_page   ?? "",
-    end_page    : s.end_page     ?? "",
-    teacher_name: s.teacher_name ?? "",
-    status      : s.status       ?? "",
-    its_now_save: s.id === now_save_id,
+    name          : s.name           ?? "",
+    start_page    : s.start_page     ?? "",
+    end_page      : s.end_page       ?? "",
+    teacher_name  : s.teacher_name   ?? "",
+    every_day_page: s.every_day_page ?? "",
+    started_at    : s.started_at     ?? "",
+    its_now_save  : s.id === now_save_id,
   }));
 
   return jsonResponse({ error: false, history });

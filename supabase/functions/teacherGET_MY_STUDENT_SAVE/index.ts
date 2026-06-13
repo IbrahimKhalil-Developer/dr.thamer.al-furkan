@@ -90,19 +90,17 @@ Deno.serve(async (req: Request) => {
 
   // ── 7. الرد بمعلومات الحفظة ──────────────────────────────────────
   return jsonResponse({
-    error: false,
-    save: {
-      name               : saveRow.name                ?? "",
-      teacher_name       : saveRow.teacher_name        ?? "",
-      exam1_teacher_name : saveRow.exam1_teacher_name  ?? "",
-      exam2_teacher_name : saveRow.exam2_teacher_name  ?? "",
-      start_page         : saveRow.start_page          ?? "",
-      end_page           : saveRow.end_page            ?? "",
-      current_page       : saveRow.page_current        ?? "",
-      every_day_page     : saveRow.every_day_page      ?? "",
-      started_at         : saveRow.started_at          ?? "",
-      exam1              : saveRow.exam1               ?? "",
-      exam2              : saveRow.exam2               ?? "",
-    },
+    error              : false,
+    name               : saveRow.name               ?? "",
+    teacher_name       : saveRow.teacher_name       ?? "",
+    exam1_teacher_name : saveRow.exam1_teacher_name ?? "",
+    exam2_teacher_name : saveRow.exam2_teacher_name ?? "",
+    start_page         : saveRow.start_page         ?? "",
+    end_page           : saveRow.end_page           ?? "",
+    current_page       : saveRow.page_current       ?? "",
+    every_day_page     : saveRow.every_day_page     ?? "",
+    started_at         : saveRow.started_at         ?? "",
+    exam1              : saveRow.exam1              ?? "",
+    exam2              : saveRow.exam2              ?? "",
   });
 });

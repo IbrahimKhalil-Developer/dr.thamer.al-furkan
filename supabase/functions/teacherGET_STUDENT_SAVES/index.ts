@@ -83,10 +83,10 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: true, errors: "لا توجد حفظة نشطة لهذا الطالب" }, 404);
   }
 
-  // ── 5. جلب الحفظة الحالية للتحقق من الملكية ─────────────────────
+  // ── 5. جلب الحفظة الحالية للتحقق من الملكية والحالة ─────────────
   const { data: currentSave, error: saveErr } = await supabaseAdmin
     .from("users_saves")
-    .select("teacher_id, exam1_teacher_id, exam2_teacher_id")
+    .select("teacher_id, exam1_teacher_id, exam2_teacher_id, status")
     .eq("id", currentSaveId)
     .maybeSingle();
 
@@ -102,8 +102,12 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: true, errors: "غير مصرح لك بعرض بيانات هذا الطالب" }, 403);
   }
 
-  // ── 6-أ. المدرس الأصلي — كل حفظات الطالب ───────────────────────
+  // ── 6-أ. المدرس الأصلي — كل حفظات الطالب بشرط أن تكون الحالية ACTIVE
   if (isMainTeacher) {
+    if (currentSave.status !== "ACTIVE") {
+      return jsonResponse({ error: false, saves: [] });
+    }
+
     const { data: allSaves } = await supabaseAdmin
       .from("users_saves")
       .select("id, name, teacher_name, status, start_page, end_page")
@@ -123,14 +127,35 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: false, saves });
   }
 
-  // ── 6-ب. مكلَّف — الحفظة الحالية فقط مع exam_type ──────────────
+  // ── 6-ب. مكلَّف — الحفظة الحالية فقط بشرط تطابق الحالة ووجود صف اختبار
+  let examType: 1 | 2 | null = null;
+  if (isExam1Teacher && currentSave.status === "IN_EXAM1") {
+    examType = 1;
+  } else if (isExam2Teacher && currentSave.status === "IN_EXAM2") {
+    examType = 2;
+  }
+
+  if (!examType) {
+    return jsonResponse({ error: false, saves: [] });
+  }
+
+  // يجب أن يوجد صف اختبار في users_pages_tests لنفس الحفظة وبنفس النوع
+  const { data: testRows } = await supabaseAdmin
+    .from("users_pages_tests")
+    .select("id")
+    .eq("save_id", currentSaveId)
+    .eq("type", examType === 1 ? "EXAM1" : "EXAM2")
+    .limit(1);
+
+  if (!testRows || testRows.length === 0) {
+    return jsonResponse({ error: false, saves: [] });
+  }
+
   const { data: saveRow } = await supabaseAdmin
     .from("users_saves")
     .select("id, name, teacher_name, status, start_page, end_page")
     .eq("id", currentSaveId)
     .maybeSingle();
-
-  const examType = isExam1Teacher ? 1 : 2;
 
   const saves = saveRow ? [{
     id          : saveRow.id           ?? "",

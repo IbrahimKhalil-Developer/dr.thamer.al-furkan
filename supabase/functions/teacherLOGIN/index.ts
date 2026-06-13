@@ -111,11 +111,11 @@ Deno.serve(async (req: Request) => {
           .update({ joined: true, joined_in: new Date().toISOString() })
           .eq("teacher_id", teacherId),
 
-    // save_ids التابعة لهذا المشرف
+    // الحفظات المرتبطة بهذا المشرف (أصلي أو مكلّف اختبار)
     supabaseAdmin
       .from("users_saves")
-      .select("id")
-      .eq("teacher_id", teacherId),
+      .select("id, status, teacher_id, exam1_teacher_id, exam2_teacher_id")
+      .or(`teacher_id.eq.${teacherId},exam1_teacher_id.eq.${teacherId},exam2_teacher_id.eq.${teacherId}`),
 
     // كل المستخدمين (أعمدة ضرورية فقط)
     supabaseAdmin
@@ -130,7 +130,19 @@ Deno.serve(async (req: Request) => {
   ]);
 
   // ── بناء الهياكل المساعدة (O(n) في الذاكرة) ─────────────────────
-  const teacherSaveIds = new Set((savesResult.data ?? []).map((s: any) => s.id));
+  const savesRows = savesResult.data ?? [];
+
+  // حفظات المشرف الأصلي بشرط أن تكون الحالة ACTIVE
+  const teacherSaveIds = new Set(
+    savesRows
+      .filter((s: any) => String(s.teacher_id ?? "") === teacherId && s.status === "ACTIVE")
+      .map((s: any) => s.id)
+  );
+
+  // saveMap للتحقق من حالة الحفظة في taklif_students
+  const saveMap = new Map<string, any>(
+    savesRows.map((s: any) => [String(s.id), s])
+  );
 
   // userMap مشترك لـ my_students و taklif_students — يُبنى مرة واحدة
   const userMap = new Map<string, any>(
@@ -157,7 +169,16 @@ Deno.serve(async (req: Request) => {
   }
 
   const taklifStudentsRaw = [...lastRowPerUser.values()]
-    .filter((r: any) => String(r.teacher_id) === teacherId)
+    .filter((r: any) => {
+      if (String(r.teacher_id) !== teacherId) return false;
+      // التحقق من حالة الحفظة الحالية للطالب حسب نوع التكليف
+      const u = userMap.get(String(r.user_id));
+      const save = u?.save_id ? saveMap.get(String(u.save_id)) : undefined;
+      if (!save) return false;
+      if (String(save.exam1_teacher_id ?? "") === teacherId) return save.status === "IN_EXAM1";
+      if (String(save.exam2_teacher_id ?? "") === teacherId) return save.status === "IN_EXAM2";
+      return false;
+    })
     .map((r: any) => {
       const u = userMap.get(String(r.user_id)) ?? {};
       return {

@@ -20,44 +20,24 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: true, errors: "الطريقة غير مسموح بها" }, 405);
   }
 
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return jsonResponse({ error: true, errors: "بيانات غير صالحة" }, 400);
+  // ── 1. التحقق من التوكن عبر Authorization header ─────────────────
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const token      = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+
+  if (!token) {
+    return jsonResponse({ error: true, errors: "يجب إرسال رمز المصادقة" }, 401);
   }
 
-  const { access_token, refresh_token, user_id } = body ?? {};
-
-  // ── 1. التحقق من الحقول الأساسية ────────────────────────────────
-  if (!access_token || !refresh_token || !user_id) {
-    return jsonResponse({ error: true, errors: "بيانات غير مكتملة" }, 400);
+  const { data: authData, error: authError } = await supabaseAuth.auth.getUser(token);
+  if (authError || !authData?.user?.email) {
+    return jsonResponse({ error: true, errors: "رمز المصادقة غير صالح" }, 401);
   }
 
-  // ── 2. التحقق من توكن الأستاذ ───────────────────────────────────
-  let authEmail: string;
-
-  const { data: userData, error: userError } =
-    await supabaseAuth.auth.getUser(access_token);
-
-  if (!userError && userData?.user?.email) {
-    authEmail = userData.user.email;
-  } else {
-    const { data: refreshData, error: refreshError } =
-      await supabaseAuth.auth.refreshSession({ refresh_token });
-
-    if (refreshError || !refreshData?.session?.user?.email) {
-      return jsonResponse({ error: true, errors: "انتهت الجلسة، يرجى تسجيل الدخول مجدداً" }, 401);
-    }
-
-    authEmail = refreshData.session.user.email;
-  }
-
-  // ── 3. جلب teacher_id من جدول teachers ──────────────────────────
+  // ── 2. جلب teacher_id من جدول teachers بالإيميل ─────────────────
   const { data: teacher, error: teacherErr } = await supabaseAdmin
     .from("teachers")
     .select("teacher_id")
-    .eq("email", authEmail)
+    .eq("email", authData.user.email)
     .maybeSingle();
 
   if (teacherErr || !teacher) {
@@ -65,6 +45,20 @@ Deno.serve(async (req: Request) => {
   }
 
   const teacherId = String(teacher.teacher_id);
+
+  // ── 3. قراءة الـ body ─────────────────────────────────────────────
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return jsonResponse({ error: true, errors: "بيانات غير صالحة" }, 400);
+  }
+
+  const { user_id } = body ?? {};
+
+  if (!user_id) {
+    return jsonResponse({ error: true, errors: "بيانات غير مكتملة" }, 400);
+  }
 
   // ── 4. جلب save_id الحالي للطالب ────────────────────────────────
   const { data: userRow, error: userRowErr } = await supabaseAdmin
@@ -139,7 +133,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: false, saves: [] });
   }
 
-  // يجب أن يوجد صف اختبار في users_pages_tests لنفس الحفظة وبنفس النوع
   const { data: testRows } = await supabaseAdmin
     .from("users_pages_tests")
     .select("id")

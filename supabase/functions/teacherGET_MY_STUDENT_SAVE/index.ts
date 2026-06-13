@@ -65,7 +65,7 @@ Deno.serve(async (req: Request) => {
   // ── 4. جلب صف الحفظة من users_saves ─────────────────────────────
   const { data: saveRow, error: saveErr } = await supabaseAdmin
     .from("users_saves")
-    .select("id, user_id, status, name, teacher_name, exam1_teacher_name, exam2_teacher_name, start_page, end_page, current_page, every_day_page, started_at, exam1, exam2")
+    .select("id, user_id, teacher_id, status, name, teacher_name, exam1_teacher_name, exam2_teacher_name, start_page, end_page, current_page, every_day_page, started_at, exam1, exam2")
     .eq("id", now_save_id)
     .maybeSingle();
 
@@ -80,6 +80,11 @@ Deno.serve(async (req: Request) => {
 
   // ── 6. التحقق: الحفظة نشطة ───────────────────────────────────────
   if (saveRow.status !== "ACTIVE") {
+    return jsonResponse(UNAUTHORIZED, 403);
+  }
+
+  // ── 7. التحقق: teacher_id يطابق المشرف في التوكن ────────────────
+  if (String(saveRow.teacher_id ?? "") !== teacherId) {
     return jsonResponse(UNAUTHORIZED, 403);
   }
 

@@ -85,14 +85,23 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(UNAUTHORIZED, 403);
   }
 
-  // ── 5. جلب جميع حفظات الطالب ─────────────────────────────────────
-  const { data: allSaves } = await supabaseAdmin
-    .from("users_saves")
-    .select("id, name, start_page, end_page, teacher_name, every_day_page, started_at")
-    .eq("user_id", user_id)
-    .order("id", { ascending: true });
+  // ── 5. جلب اسم الطالب وجميع حفظاته (بالتوازي) ───────────────────
+  const [userResult, savesResult] = await Promise.all([
+    supabaseAdmin
+      .from("users")
+      .select("full_name")
+      .eq("user_id", user_id)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("users_saves")
+      .select("id, name, start_page, end_page, teacher_name, every_day_page, started_at")
+      .eq("user_id", user_id)
+      .order("id", { ascending: true }),
+  ]);
 
-  const history = (allSaves ?? []).map((s: any) => ({
+  const fullName = userResult.data?.full_name ?? "";
+
+  const history = (savesResult.data ?? []).map((s: any) => ({
     name          : s.name           ?? "",
     start_page    : s.start_page     ?? "",
     end_page      : s.end_page       ?? "",
@@ -102,5 +111,5 @@ Deno.serve(async (req: Request) => {
     its_now_save  : s.id === now_save_id,
   }));
 
-  return jsonResponse({ error: false, history });
+  return jsonResponse({ error: false, full_name: fullName, history });
 });

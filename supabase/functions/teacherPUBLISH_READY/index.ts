@@ -254,13 +254,13 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: true, errors: "لا تملك صلاحية الوصول لهذا الصف، يرجى التواصل مع إدارة المركز" }, 403);
     }
 
+    // ── 6. التحقق من تطابق row_id (فقط في مسار EXAM) ─────────────────
+    if (String(targetRow.id) !== String(row_id)) {
+      return jsonResponse({ error: true, errors: "الصف المُحدَّد لا يتطابق مع آخر صف للاختبار، يرجى تحديث الصفحة وإعادة المحاولة" }, 409);
+    }
+
     pageStatus   = calcPageStatusExam(sowad, nisyan, fateh as number);
     errorsNumber = { nisyan, sowad, fateh: fateh as number };
-  }
-
-  // ── 6. التحقق من تطابق row_id مع الصف المقصود ────────────────────
-  if (String(targetRow.id) !== String(row_id)) {
-    return jsonResponse({ error: true, errors: "الصف المُحدَّد لا يتطابق مع آخر صف للحفظ، يرجى تحديث الصفحة وإعادة المحاولة" }, 409);
   }
 
   // ── 7. التحقق من أن الصف في حالة استعداد ────────────────────────

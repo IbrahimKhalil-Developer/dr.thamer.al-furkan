@@ -45,6 +45,21 @@ function n(v: any): any {
   return v === null || v === undefined ? "" : v;
 }
 
+function formatSowad(v: any): string | number {
+  const num = Number(v ?? 0);
+  return num === 0 ? "صفر" : num;
+}
+
+function formatNisyan(v: any): string {
+  const num = Number(v ?? 0);
+  if (num === 0)  return "صفر";
+  if (num === 1)  return "مرة";
+  if (num === 2)  return "مرتان";
+  if (num === 3)  return "ثلاث مرات";
+  if (num <= 10)  return `${num} مرات`;
+  return `${num} مرة`;
+}
+
 // شكل الرد المشترك للصفوف
 function buildRowResponse(row: any, extraFields: Record<string, any> = {}): any {
   return {
@@ -140,7 +155,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: pages, error: pagesErr } = await supabaseAdmin
       .from("users_pages")
-      .select("id, page_name, status, page_status, ready_at, finished_at, is_45min_requested, MePageArabic, custom_info, teacher_id")
+      .select("id, page_name, status, page_status, ready_at, finished_at, is_45min_requested, MePageArabic, custom_info, teacher_id, errors_number")
       .eq("save_id", save_id)
       .order("id", { ascending: false })
       .limit(1);
@@ -155,7 +170,10 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: true, errors: "لا تملك صلاحية الوصول لهذا الصف، يرجى التواصل مع إدارة المركز" }, 403);
     }
 
-    return jsonResponse(buildRowResponse(pageRow));
+    return jsonResponse(buildRowResponse(pageRow, {
+      sowad : formatSowad(pageRow.errors_number?.sowad),
+      nisyan: formatNisyan(pageRow.errors_number?.nisyan),
+    }));
   }
 
   // ── 5-ب. مسار EXAM (يُحدَّد نوع الاختبار من حالة الحفظ) ──────────
@@ -182,7 +200,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: tests, error: testsErr } = await supabaseAdmin
     .from("users_pages_tests")
-    .select("id, page_name, status, page_status, ready_at, finished_at, is_45min_requested, MePageArabic, custom_info, type, teacher_id")
+    .select("id, page_name, status, page_status, ready_at, finished_at, is_45min_requested, MePageArabic, custom_info, type, teacher_id, errors_number")
     .eq("save_id", save_id)
     .eq("type", examType)
     .order("id", { ascending: false })
@@ -201,5 +219,10 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: true, errors: "لا تملك صلاحية الوصول لهذا الصف، يرجى التواصل مع إدارة المركز" }, 403);
   }
 
-  return jsonResponse(buildRowResponse(testRow, { type: n(testRow.type) }));
+  return jsonResponse(buildRowResponse(testRow, {
+    type  : n(testRow.type),
+    sowad : formatSowad(testRow.errors_number?.sowad),
+    nisyan: formatNisyan(testRow.errors_number?.nisyan),
+    fateh : formatNisyan(testRow.errors_number?.fateh),
+  }));
 });

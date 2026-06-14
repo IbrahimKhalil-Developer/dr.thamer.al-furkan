@@ -48,12 +48,16 @@ async function sendWahaMessage(phone: string, text: string): Promise<void> {
   }
 }
 
-// صياغة رسالة الطالب حسب الجنس
-function buildStudentMessage(isFemale: boolean, teacherName: string): string {
+// صياغة رسالة الطالب حسب الجنس ونوع التقييم
+function buildStudentMessage(isFemale: boolean, teacherName: string, examType?: "EXAM1" | "EXAM2"): string {
   const hifdh = isFemale ? "حفظكِ"   : "حفظكَ";
   const sup   = isFemale ? "المشرفة" : "المشرف";
   const can   = isFemale ? "يمكنكِ"  : "يمكنكَ";
-  return `تم تقييم ${hifdh} لهذا اليوم من قبل ${sup} *${teacherName}* ${can} الإطلاع على النتيجة من تطبيق تحفيظ`;
+  let context: string;
+  if (examType === "EXAM1")      context = "للإختبار الجزئي";
+  else if (examType === "EXAM2") context = "للإختبار التراكمي";
+  else                           context = "لهذا اليوم";
+  return `تم تقييم ${hifdh} ${context} من قبل ${sup} *${teacherName}* ${can} الإطلاع على النتيجة من تطبيق تحفيظ`;
 }
 
 // حساب page_status لصفوف الحفظ اليومي (users_pages): sowad + nisyan
@@ -180,6 +184,7 @@ Deno.serve(async (req: Request) => {
   let targetRow: any;
   let pageStatus: string;
   let errorsNumber: Record<string, number>;
+  let resolvedExamType: "EXAM1" | "EXAM2" | undefined;
 
   if (req_type === "NOT_EXAM") {
     if (String(saveRow.teacher_id ?? "") !== authId) {
@@ -254,8 +259,9 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: true, errors: "لا تملك صلاحية الوصول لهذا الصف، يرجى التواصل مع إدارة المركز" }, 403);
     }
 
-    pageStatus   = calcPageStatusExam(sowad, nisyan, fateh as number);
-    errorsNumber = { nisyan, sowad, fateh: fateh as number };
+    resolvedExamType = examType;
+    pageStatus       = calcPageStatusExam(sowad, nisyan, fateh as number);
+    errorsNumber     = { nisyan, sowad, fateh: fateh as number };
   }
 
   // ── 7. التحقق من أن الصف في حالة استعداد ────────────────────────
@@ -294,7 +300,7 @@ Deno.serve(async (req: Request) => {
   // ── 9. إرسال رسالة واتساب للطالب ─────────────────────────────────
   const studentPhone = String(userRow.user_phone_number ?? "");
   if (studentPhone) {
-    const message = buildStudentMessage(isFemale, String(targetRow.teacher_name ?? ""));
+    const message = buildStudentMessage(isFemale, String(targetRow.teacher_name ?? ""), resolvedExamType);
     await sendWahaMessage(studentPhone, message);
   }
 

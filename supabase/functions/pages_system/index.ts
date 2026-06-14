@@ -959,8 +959,6 @@ Deno.serve(async (req: Request) => {
 
           // ── لا يوجد صف — حفظ جديد بدون سجل ─────────────────────────────
           if (!lastRow) {
-            const createdDate  = String(saveRow.created_at ?? "").split("T")[0];
-            if (diffDays(createdDate, today) < 2) continue;
             const firstPage    = edp < 1 ? 1 : Math.ceil(edp);
             const firstPageNum = Number(saveRow.start_page) + firstPage - 1;
             const pageDisp     = buildPageDisplay(firstPageNum, edp);

@@ -19,9 +19,12 @@ function jsonResponse(payload: any, status = 200): Response {
   });
 }
 
-// قيمة عدد أخطاء صحيحة: number بين 0 و 999
-function isValidCount(v: any): boolean {
-  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 999;
+// تحويل string أو number إلى عدد صحيح، أو null لو غير صالح
+function parseCount(v: any): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(String(v).trim());
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > 999) return null;
+  return n;
 }
 
 // هل الوقت الآن بين 11:00 و 11:45 مساءً بتوقيت بغداد
@@ -99,14 +102,17 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: true, errors: "بيانات غير صالحة" }, 400);
   }
 
-  const { user_id, save_id, req_type, row_id, fateh, nisyan, sowad, custom_info_text } = body ?? {};
+  const { user_id, save_id, req_type, row_id, custom_info_text } = body ?? {};
+  const rawNisyan = body?.nisyan;
+  const rawSowad  = body?.sowad;
+  const rawFateh  = body?.fateh;
 
   // الحقول المطلوبة حصراً في كل الأحوال
   if (
     !user_id || !save_id || !req_type ||
     row_id === undefined || row_id === null ||
-    nisyan === undefined || nisyan === null ||
-    sowad  === undefined || sowad  === null ||
+    rawNisyan === undefined || rawNisyan === null ||
+    rawSowad  === undefined || rawSowad  === null ||
     custom_info_text === undefined || custom_info_text === null
   ) {
     return jsonResponse({ error: true, errors: "بيانات غير مكتملة" }, 400);
@@ -120,17 +126,22 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: true, errors: "بيانات غير صالحة" }, 400);
   }
 
-  // sowad و nisyan يجب أن تكون أرقاماً صحيحة بين 0 و 999
-  if (!isValidCount(nisyan) || !isValidCount(sowad)) {
+  // تحويل sowad و nisyan من string إلى number والتحقق من صحتهما
+  const nisyan = parseCount(rawNisyan);
+  const sowad  = parseCount(rawSowad);
+
+  if (nisyan === null || sowad === null) {
     return jsonResponse({ error: true, errors: "قيم الأخطاء يجب أن تكون أرقاماً صحيحة بين 0 و 999" }, 400);
   }
 
   // fateh مطلوب حصراً في حالة الاختبار EXAM
+  let fateh: number | null = null;
   if (req_type === "EXAM") {
-    if (fateh === undefined || fateh === null) {
+    if (rawFateh === undefined || rawFateh === null) {
       return jsonResponse({ error: true, errors: "بيانات غير مكتملة" }, 400);
     }
-    if (!isValidCount(fateh)) {
+    fateh = parseCount(rawFateh);
+    if (fateh === null) {
       return jsonResponse({ error: true, errors: "قيم الأخطاء يجب أن تكون أرقاماً صحيحة بين 0 و 999" }, 400);
     }
   }
@@ -243,8 +254,8 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: true, errors: "لا تملك صلاحية الوصول لهذا الصف، يرجى التواصل مع إدارة المركز" }, 403);
     }
 
-    pageStatus   = calcPageStatusExam(sowad, nisyan, fateh);
-    errorsNumber = { nisyan, sowad, fateh };
+    pageStatus   = calcPageStatusExam(sowad, nisyan, fateh as number);
+    errorsNumber = { nisyan, sowad, fateh: fateh as number };
   }
 
   // ── 6. التحقق من تطابق row_id مع الصف المقصود ────────────────────

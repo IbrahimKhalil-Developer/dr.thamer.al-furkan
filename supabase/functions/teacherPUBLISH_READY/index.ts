@@ -262,6 +262,7 @@ Deno.serve(async (req: Request) => {
     status      : "finished",
     page_status : pageStatus,
     errors_number: errorsNumber,
+    finished_at : new Date().toISOString(),
   };
 
   // custom_info: فقط إذا أرسل المشرف نصاً غير فارغ

@@ -135,7 +135,7 @@ Deno.serve(async (req: Request) => {
   // ── 4. جلب صف users_saves ────────────────────────────────────────
   const { data: saveRow, error: saveErr } = await supabaseAdmin
     .from("users_saves")
-    .select("teacher_id, exam1_teacher_id, exam2_teacher_id, status")
+    .select("teacher_id, exam1_teacher_id, exam2_teacher_id, status, start_page, end_page")
     .eq("id", save_id)
     .maybeSingle();
 
@@ -220,9 +220,11 @@ Deno.serve(async (req: Request) => {
   }
 
   return jsonResponse(buildRowResponse(testRow, {
-    type  : n(testRow.type),
-    sowad : formatSowad(testRow.errors_number?.sowad),
-    nisyan: formatNisyan(testRow.errors_number?.nisyan),
-    fateh : formatNisyan(testRow.errors_number?.fateh),
+    type      : n(testRow.type),
+    sowad     : formatSowad(testRow.errors_number?.sowad),
+    nisyan    : formatNisyan(testRow.errors_number?.nisyan),
+    fateh     : formatNisyan(testRow.errors_number?.fateh),
+    start_page: n(saveRow.start_page),
+    end_page  : n(saveRow.end_page),
   }));
 });

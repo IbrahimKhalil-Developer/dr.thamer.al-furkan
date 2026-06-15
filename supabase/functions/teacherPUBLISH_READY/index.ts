@@ -106,7 +106,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: true, errors: "بيانات غير صالحة" }, 400);
   }
 
-  const { user_id, save_id, req_type, row_id, custom_info_text } = body ?? {};
+  const { user_id, save_id, req_type, custom_info_text } = body ?? {};
   const rawNisyan = body?.nisyan;
   const rawSowad  = body?.sowad;
   const rawFateh  = body?.fateh;
@@ -114,7 +114,6 @@ Deno.serve(async (req: Request) => {
   // الحقول المطلوبة حصراً في كل الأحوال
   if (
     !user_id || !save_id || !req_type ||
-    row_id === undefined || row_id === null ||
     rawNisyan === undefined || rawNisyan === null ||
     rawSowad  === undefined || rawSowad  === null ||
     custom_info_text === undefined || custom_info_text === null

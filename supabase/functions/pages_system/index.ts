@@ -402,16 +402,6 @@ function msgFatherReject(saveName: string, pageDisp: string, fullName: string, i
   ].join("\n");
 }
 
-function msgNewSave(saveName: string, fullName: string, isFU: boolean, pageDisp: string, forFather: boolean): string {
-  const nameLbl = forFather ? G.guardian(isFU) : G.student(isFU);
-  return [
-    ...hdr(nameLbl, fullName), T.SEP,
-    `📚 الحفظ: *${saveName}*`,
-    `📝 حفظ الغد: *${pageDisp}*`,
-    T.SEP, ``, T.FOOTER,
-  ].join("\n");
-}
-
 function msgNewSaveStudent(
   saveName: string, fullName: string, isFU: boolean,
   pageDisp: string, phoneLocal: string
@@ -995,7 +985,6 @@ Deno.serve(async (req: Request) => {
             await createPageRow(supabase, userId, saveId, teacherId, tRec?.full_name ?? "", tRec?.photo_url ?? "", firstPageNum, edp,
               { status: newSt, page_status: newSt, date: tomorrow, MePageArabic: pageDisp });
             await waha(user.user_phone_number, msgNewSaveStudent(saveName, user.full_name, isFU, pageDisp, convertPhone(user.user_phone_number)));
-            if (user.father_phone_number) await waha(user.father_phone_number, msgNewSave(saveName, user.full_name, isFU, pageDisp, true));
             continue;
           }
 

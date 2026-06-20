@@ -11,6 +11,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 const VALID_TYPES = ["NOT_EXAM", "EXAM"] as const;
+const VALID_TAKEEM2 = ["reject", "good", "very_good", "perfect"] as const;
 
 function jsonResponse(payload: any, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -125,6 +126,10 @@ Deno.serve(async (req: Request) => {
 
   if (!VALID_TYPES.includes(req_type)) {
     return jsonResponse({ error: true, errors: "نوع الطلب غير صحيح، القيم المقبولة: NOT_EXAM, EXAM" }, 400);
+  }
+
+  if (!VALID_TAKEEM2.includes(takeem2)) {
+    return jsonResponse({ error: true, errors: "قيمة takeem2 غير صحيحة، القيم المقبولة: reject, good, very_good, perfect" }, 400);
   }
 
   if (typeof custom_info_text !== "string") {

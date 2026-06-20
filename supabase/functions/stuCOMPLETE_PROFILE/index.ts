@@ -91,7 +91,6 @@ serve(async (req) => {
       f_phone_number,
       brith,
       location,
-      gps,
       picture,
     };
 
@@ -167,13 +166,15 @@ serve(async (req) => {
       return json({ error: true, errors: "العنوان المُدخل طويل جداً. يجب ألا يتجاوز 100 حرف." }, 400);
     }
 
-    // ── 12. التحقق من إحداثيات GPS ──────────────────────────────────
-    if (!/^-?[0-9]{1,3}(\.[0-9]+)?,\s*-?[0-9]{1,3}(\.[0-9]+)?$/.test(gps)) {
+    // ── 12. التحقق من إحداثيات GPS (اختياري) ────────────────────────
+    if (gps && !/^-?[0-9]{1,3}(\.[0-9]+)?,\s*-?[0-9]{1,3}(\.[0-9]+)?$/.test(gps)) {
       return json({
         error: true,
         errors: "إحداثيات GPS غير صالحة. يُرجى إرسالها بالصيغة: latitude,longitude (مثال: 33.3152,44.3661).",
       }, 400);
     }
+
+    const finalGps = gps || "00.0000, 00.0000";
 
     // ── 13. تحديد bucket حسب الجنس ──────────────────────────────────
     const bucketName = userRow.gender === "male"
@@ -216,7 +217,7 @@ serve(async (req) => {
         father_phone_number: f_phone_number,
         user_location:       location,
         date_of_brith:       brith,
-        auto_user_location:  gps,
+        auto_user_location:  finalGps,
         profile_incomplete:  false,
       })
       .eq("user_id", user_id);

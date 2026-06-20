@@ -19,8 +19,8 @@ function buildPageDisplay(page: number, edp: number): string {
     if (fraction === 0.75) return `الربع الثالث من ص${start}`;
     return `${page}`;
   } else {
-    const start = Math.floor(page);
-    const end = start + Math.ceil(edp) - 1;
+    const end = Math.floor(page);
+    const start = end - Math.ceil(edp) + 1;
     return start === end ? `${start}` : `${start} إلى ${end}`;
   }
 }

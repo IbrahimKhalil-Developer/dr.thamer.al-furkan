@@ -106,7 +106,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: true, errors: "بيانات غير صالحة" }, 400);
   }
 
-  const { user_id, save_id, req_type, custom_info_text } = body ?? {};
+  const { user_id, save_id, req_type, custom_info_text, takeem1, takeem2 } = body ?? {};
   const rawNisyan = body?.nisyan;
   const rawSowad  = body?.sowad;
   const rawFateh  = body?.fateh;
@@ -116,7 +116,9 @@ Deno.serve(async (req: Request) => {
     !user_id || !save_id || !req_type ||
     rawNisyan === undefined || rawNisyan === null ||
     rawSowad  === undefined || rawSowad  === null ||
-    custom_info_text === undefined || custom_info_text === null
+    custom_info_text === undefined || custom_info_text === null ||
+    takeem1 === undefined || takeem1 === null || takeem1 === "" ||
+    takeem2 === undefined || takeem2 === null || takeem2 === ""
   ) {
     return jsonResponse({ error: true, errors: "بيانات غير مكتملة" }, 400);
   }
@@ -270,10 +272,12 @@ Deno.serve(async (req: Request) => {
 
   // ── 8. بناء التحديث وتنفيذه ──────────────────────────────────────
   const updatePayload: Record<string, any> = {
-    status      : "finished",
-    page_status : pageStatus,
-    errors_number: errorsNumber,
-    finished_at : new Date().toISOString(),
+    status        : "finished",
+    page_status   : pageStatus,
+    errors_number : errorsNumber,
+    finished_at   : new Date().toISOString(),
+    takeem        : takeem1,
+    takeem_status : takeem2,
   };
 
   // custom_info: فقط إذا أرسل المشرف نصاً غير فارغ

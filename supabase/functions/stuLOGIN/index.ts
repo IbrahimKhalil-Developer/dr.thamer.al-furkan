@@ -392,7 +392,7 @@ Deno.serve(async (req: Request) => {
       .filter(p =>
         p.save_id === currentSave.id &&
         p.status === "finished" &&
-        (p.page_status === "good" || p.page_status === "perfect")
+        p.page_status !== "reject"
       )
       .sort((a, b) => b.id - a.id)[0];
 

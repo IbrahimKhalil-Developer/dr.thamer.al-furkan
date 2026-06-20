@@ -91,6 +91,9 @@ const G = {
     `رسوبٌ — يُعاد التسميع ${tomorrow ? "بعد غدٍ" : "ليوم غدٍ"}`,
   rejectDayExam: (tomorrow:boolean) =>
     `رسوبٌ — يُعاد الاختبار ${tomorrow ? "بعد غدٍ" : "ليوم غدٍ"}`,
+  addressed : (f:boolean) => f ? "بكِ"    : "بكَ",
+  youDid    : (f:boolean) => f ? "قمتِ"   : "قمتَ",
+  willReach : (f:boolean) => f ? "سيصلكِ" : "سيصلكَ",
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -405,6 +408,33 @@ function msgNewSave(saveName: string, fullName: string, isFU: boolean, pageDisp:
     ...hdr(nameLbl, fullName), T.SEP,
     `📚 الحفظ: *${saveName}*`,
     `📝 حفظ الغد: *${pageDisp}*`,
+    T.SEP, ``, T.FOOTER,
+  ].join("\n");
+}
+
+function msgNewSaveStudent(
+  saveName: string, fullName: string, isFU: boolean,
+  pageDisp: string, phoneLocal: string
+): string {
+  return [
+    `📖 *مرحباً ${G.addressed(isFU)} في مشروع التحفيظ المُتقِن*`, ``,
+    `👤 ${G.student(isFU)}: *${fullName}*`, ``,
+    T.SEP,
+    `تفاصيل ${G.hisSelf(isFU)} ليوم غد:`,
+    `📚 الحفظ: *${saveName}*`,
+    `📝 حفظ الغد: *${pageDisp}*`,
+    T.SEP, ``,
+    `للإستعداد يجب الإنضمام إلى تطبيق تحفيظ`,
+    `طريقة الدخول:`,
+    `1- تحميل التطبيق من الرابط`,
+    `2- الضغط على تسجيل الدخول ووضع رقم الهاتف الذي ${G.youDid(isFU)} برفعه في الإستمارة والذي هو *${phoneLocal}*`,
+    `3- إدخال رمز التحقق الذي ${G.willReach(isFU)} على واتساب`, ``,
+    `رابط تحميل التطبيق: https://www.mediafire.com/file/ohjf0rft0dia0z4/تحفيظ+للطلاب.apk/file`, ``,
+    `خطوات التثبيت:`,
+    `1- فتح الرابط`,
+    `2- الضغط على المستطيل الأزرق`,
+    `3- الضغط على "تثبيت على أي حال"`, ``,
+    `ملاحظة: في حال ظهور جمل مثل "تطبيق غير آمن"، "تطبيق غير معروف"، أو "يشكل خطر ما"، لا مشكلة، قم بتخطي الأمر وإكمال عملية التثبيت، فسبب هذه التنبيهات أن التطبيق لم يتم رفعه على متجر Play إلى الآن.`,
     T.SEP, ``, T.FOOTER,
   ].join("\n");
 }
@@ -964,7 +994,7 @@ Deno.serve(async (req: Request) => {
             const pageDisp     = buildPageDisplay(firstPageNum, edp);
             await createPageRow(supabase, userId, saveId, teacherId, tRec?.full_name ?? "", tRec?.photo_url ?? "", firstPageNum, edp,
               { status: newSt, page_status: newSt, date: tomorrow, MePageArabic: pageDisp });
-            await waha(user.user_phone_number, msgNewSave(saveName, user.full_name, isFU, pageDisp, false));
+            await waha(user.user_phone_number, msgNewSaveStudent(saveName, user.full_name, isFU, pageDisp, convertPhone(user.user_phone_number)));
             if (user.father_phone_number) await waha(user.father_phone_number, msgNewSave(saveName, user.full_name, isFU, pageDisp, true));
             continue;
           }

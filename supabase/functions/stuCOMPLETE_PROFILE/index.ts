@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.203.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.40.0";
+import { createClient } from "npm:@supabase/supabase-js@2.49.8";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -28,7 +27,7 @@ function json(body: unknown, status: number): Response {
   });
 }
 
-serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return json({ error: true, errors: "طريقة الطلب غير مدعومة. يُرجى استخدام طريقة POST." }, 405);
   }

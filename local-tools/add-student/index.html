@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إضافة طالب جديد</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --accent: #22c55e;
+    --accent-hover: #16a34a;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --border: #334155;
+    --danger: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    font-family: "Tahoma", "Segoe UI", sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+  }
+  h1 {
+    color: var(--text);
+    font-size: 22px;
+    margin: 0 0 4px;
+    text-align: center;
+  }
+  .subtitle {
+    color: var(--muted);
+    text-align: center;
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+  label {
+    display: block;
+    color: var(--text);
+    font-size: 14px;
+    margin-bottom: 6px;
+    margin-top: 16px;
+  }
+  input, select {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0f172a;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  input:focus, select:focus {
+    border-color: var(--accent);
+  }
+  .row {
+    display: flex;
+    gap: 12px;
+  }
+  .row > div { flex: 1; }
+  button {
+    width: 100%;
+    margin-top: 26px;
+    padding: 12px;
+    background: var(--accent);
+    color: #06210f;
+    font-weight: bold;
+    font-size: 15px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  .msg {
+    margin-top: 16px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    text-align: center;
+    display: none;
+  }
+  .msg.success { display: block; background: rgba(34,197,94,.15); color: var(--accent); border: 1px solid var(--accent); }
+  .msg.error { display: block; background: rgba(239,68,68,.15); color: var(--danger); border: 1px solid var(--danger); }
+  details {
+    margin-top: 20px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  details input {
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>إضافة طالب جديد</h1>
+  <div class="subtitle">مركز الشيخ الدكتور عمر / ثامر الصميدعي</div>
+
+  <form id="addForm">
+    <label for="stu_name">اسم الطالب</label>
+    <input id="stu_name" type="text" required>
+
+    <div class="row">
+      <div>
+        <label for="stu_phone">رقم هاتف الطالب</label>
+        <input id="stu_phone" type="text" placeholder="0771234567" required>
+      </div>
+      <div>
+        <label for="teacher_phone">رقم هاتف المشرف</label>
+        <input id="teacher_phone" type="text" placeholder="0771234567" required>
+      </div>
+    </div>
+
+    <label for="gender">الجنس</label>
+    <select id="gender" required>
+      <option value="male">ذكر</option>
+      <option value="female">انثى</option>
+    </select>
+
+    <label for="save_name">اسم الحفظ</label>
+    <input id="save_name" type="text" required>
+
+    <div class="row">
+      <div>
+        <label for="save_start_page">بداية الحفظ</label>
+        <input id="save_start_page" type="number" required>
+      </div>
+      <div>
+        <label for="save_end_page">نهاية الحفظ</label>
+        <input id="save_end_page" type="number" required>
+      </div>
+    </div>
+
+    <label for="every_day">عدد الصفحات اليومية</label>
+    <input id="every_day" type="number" required>
+
+    <button type="submit" id="submitBtn">إضافة الطالب</button>
+    <div class="msg" id="msgBox"></div>
+
+    <details>
+      <summary>رابط الفكشن (مرة واحدة فقط)</summary>
+      <input id="functionUrl" type="text" placeholder="https://YOUR_PROJECT.supabase.co/functions/v1/addStuIbrahim">
+    </details>
+  </form>
+</div>
+
+<script>
+  const urlInput = document.getElementById('functionUrl');
+  urlInput.value = localStorage.getItem('addStuIbrahim_url') || '';
+  urlInput.addEventListener('change', () => {
+    localStorage.setItem('addStuIbrahim_url', urlInput.value.trim());
+  });
+
+  const form    = document.getElementById('addForm');
+  const msgBox  = document.getElementById('msgBox');
+  const submitBtn = document.getElementById('submitBtn');
+
+  function showMsg(text, type) {
+    msgBox.textContent = text;
+    msgBox.className = 'msg ' + type;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const functionUrl = urlInput.value.trim();
+    if (!functionUrl) {
+      showMsg('يرجى وضع رابط الفكشن أولاً', 'error');
+      return;
+    }
+
+    const payload = {
+      stu_name      : document.getElementById('stu_name').value.trim(),
+      stu_phone     : document.getElementById('stu_phone').value.trim(),
+      teacher_phone : document.getElementById('teacher_phone').value.trim(),
+      gender        : document.getElementById('gender').value,
+      save_name     : document.getElementById('save_name').value.trim(),
+      save_start_page: Number(document.getElementById('save_start_page').value),
+      save_end_page  : Number(document.getElementById('save_end_page').value),
+      every_day      : Number(document.getElementById('every_day').value),
+    };
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'جارٍ الإضافة...';
+    msgBox.className = 'msg';
+
+    try {
+      const res = await fetch(functionUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (res.ok && !data.error) {
+        showMsg('تمت إضافة الطالب بنجاح ✓', 'success');
+        form.reset();
+        document.getElementById('gender').value = 'male';
+      } else {
+        showMsg(data.errors || 'حدث خطأ غير متوقع', 'error');
+      }
+    } catch (err) {
+      showMsg('فشل الاتصال بالخادم: ' + err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'إضافة الطالب';
+    }
+  });
+</script>
+
+</body>
+</html>

@@ -85,8 +85,8 @@ const G = {
   teacherHol: (tF:boolean)=> tF? "المشرفةُ مجازةٌ"  : "المشرفُ مجازٌ",
   notEval   : () =>              "لم يتم التقييم",
   perfect   : (f:boolean) => f ? "مُتقنةٌ"           : "مُتقنٌ",
-  good      : () =>              "إمتياز",
-  veryGood  : () =>              "جيد جداً",
+  good      : () =>              "جيد جداً",
+  veryGood  : () =>              "إمتياز",
   rejectDay : (tomorrow:boolean) =>
     `رسوبٌ — يُعاد التسميع ${tomorrow ? "بعد غدٍ" : "ليوم غدٍ"}`,
   rejectDayExam: (tomorrow:boolean) =>
@@ -195,8 +195,8 @@ function translateResult(status: string, pageStatus: string, isFU: boolean, iFT:
   if (status === "not_ready" || status === "user_absence") return isFU ? "غائبة" : "غائب";
   if (status === "ready" || status === "teacher_absence")  return iFT ? "المشرفة غائبة" : "المشرف غائب";
   if (status === "finished" && pageStatus === "reject")    return "رسوب";
-  if (status === "finished" && pageStatus === "good")      return "إمتياز";
-  if (status === "finished" && pageStatus === "very_good") return "جيد جداً";
+  if (status === "finished" && pageStatus === "good")      return "جيد جداً";
+  if (status === "finished" && pageStatus === "very_good") return "إمتياز";
   if (status === "finished" && pageStatus === "perfect")   return isFU ? "مُتقِنة" : "مُتقِن";
   if (status === "holiday")        return isFU ? "مجازة" : "مجاز";
   if (status === "public_holiday") return "إجازة عامة";

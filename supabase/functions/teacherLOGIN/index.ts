@@ -18,12 +18,14 @@ function jsonResponse(payload: any, status = 200): Response {
 
 async function enrichWithPhoto(student: any): Promise<any> {
   const { _rawPhoto, ...rest } = student;
-  if (!_rawPhoto) return rest;
+  if (!_rawPhoto) {
+    return rest.gender === "male" ? { ...rest, photo_url: "https://127.0.0.1" } : rest;
+  }
   const { data } = await supabaseAdmin.storage
     .from("male_profiles_pictures")
     .createSignedUrl(_rawPhoto, 60);
   if (data?.signedUrl) return { ...rest, photo_url: data.signedUrl };
-  return rest;
+  return { ...rest, photo_url: "https://127.0.0.1" };
 }
 
 function normalizePhone(p: string): string {

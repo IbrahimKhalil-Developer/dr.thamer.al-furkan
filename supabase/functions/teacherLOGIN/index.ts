@@ -34,6 +34,11 @@ function normalizePhone(p: string): string {
   return s;
 }
 
+function displayName(fullName: string, gender: string, joined: boolean): string {
+  if (joined) return fullName;
+  return `${fullName} ${gender === "female" ? "(لم تنظم بعد)" : "(لم ينظم بعد)"}`;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return jsonResponse({ error: true, errors: "الطريقة غير مسموح بها" }, 405);
@@ -122,7 +127,7 @@ Deno.serve(async (req: Request) => {
     // كل المستخدمين (أعمدة ضرورية فقط)
     supabaseAdmin
       .from("users")
-      .select("user_id, full_name, gender, save_id, photo_url"),
+      .select("user_id, full_name, gender, save_id, photo_url, joined"),
 
     // آخر صف لكل user_id في users_pages_tests (أعمدة ضرورية فقط)
     supabaseAdmin
@@ -156,7 +161,7 @@ Deno.serve(async (req: Request) => {
     .filter((u: any) => u.save_id && teacherSaveIds.has(u.save_id))
     .map((u: any) => ({
       user_id    : u.user_id   ?? "",
-      full_name  : u.full_name ?? "",
+      full_name  : displayName(u.full_name ?? "", u.gender ?? "", u.joined === true),
       gender     : u.gender    ?? "",
       now_save_id: u.save_id   ?? "",
       _rawPhoto  : u.gender === "male" ? (u.photo_url ?? "") : "",
@@ -186,7 +191,7 @@ Deno.serve(async (req: Request) => {
       return {
         exam_row_id: r.id                 ?? "",
         user_id    : r.user_id            ?? "",
-        full_name  : (u as any).full_name ?? "",
+        full_name  : displayName((u as any).full_name ?? "", (u as any).gender ?? "", (u as any).joined === true),
         gender     : (u as any).gender    ?? "",
         now_save_id: (u as any).save_id   ?? "",
         _rawPhoto  : (u as any).gender === "male" ? ((u as any).photo_url ?? "") : "",

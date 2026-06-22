@@ -1,5 +1,5 @@
 const TW = {
-  url: 'https://miyehoqqbyihpwzulgnc.supabase.co',
+  url: 'https://urzydtlwbpnfufodygml.supabase.co',
   tokKey: 'tw_access_token', refKey: 'tw_refresh_token', adminKey: 'tw_admin',
 
   get accessToken(){ return localStorage.getItem(this.tokKey) || ''; },

@@ -1,723 +1,1100 @@
-/* ============ التطبيق الرئيسي — التوجيه والصفحات ============ */
-const APP = {
-  data: null,          // ناتج testweb_dashboard
-  loading: false,
-  current: null,       // الطالب/المشرف المفتوح حالياً
-  filters: { stStatus:'all', stGender:'all', stSort:'name', stQ:'',
-             tQ:'', tSort:'students' },
+const $ = (s, r = document) => r.querySelector(s);
+const view = () => document.getElementById('view');
+
+const APP = { admin: null, dash: null };
+
+const TITLES = {
+  overview: 'النظرة العامة', students: 'الطلاب', teachers: 'المشرفون',
+  messages: 'الرسائل', otps: 'رموز الدخول', holidays: 'العطلات',
+  logs: 'سجل العمليات', admins: 'الإداريون', 'today-log': 'سجل الطلاب لليوم',
+  'full-log': 'سجل الطلاب', 'add-student': 'إضافة طالب', 'add-teacher': 'إضافة مشرف',
 };
 
-const $ = (s,r=document)=>r.querySelector(s);
-const view = ()=>document.getElementById('view');
+const NAV_ITEMS = [
+  { id: 'overview', label: 'النظرة العامة', ic: 'grid' },
+  { id: 'today-log', label: 'سجل اليوم', ic: 'today' },
+  { id: 'full-log', label: 'سجل الطلاب', ic: 'records' },
+  { id: 'students', label: 'الطلاب', ic: 'students' },
+  { id: 'teachers', label: 'المشرفون', ic: 'teacher' },
+  { id: 'messages', label: 'الرسائل', ic: 'message' },
+  { id: 'otps', label: 'رموز الدخول', ic: 'key' },
+  { id: 'holidays', label: 'العطلات', ic: 'holiday' },
+  { id: 'logs', label: 'سجل العمليات', ic: 'logs' },
+  { id: 'admins', label: 'الإداريون', ic: 'admins', ownerOnly: true },
+];
 
-/* ---------- الإقلاع ---------- */
-window.addEventListener('DOMContentLoaded', ()=>{
-  // أزرار الإعداد
-  $('#cfg-save').onclick = ()=>{
-    const url=$('#cfg-url').value.trim(), key=$('#cfg-key').value.trim();
-    if(!/^https?:\/\/.+/.test(url)){ showCfgErr('أدخل رابط Supabase صحيحاً يبدأ بـ https://'); return; }
-    TW.save(url,key); boot();
+/* ================= الإقلاع وتسجيل الدخول ================= */
+async function boot() {
+  if (TW.accessToken) {
+    const v = await TW.verify();
+    if (v && v.error === false) { enterApp(v.admin); return; }
+  }
+  $('#boot').classList.add('hidden');
+  $('#login').classList.remove('hidden');
+}
+
+function wireLogin() {
+  const doLogin = async () => {
+    const email = $('#lg-email').value.trim();
+    const pass = $('#lg-pass').value;
+    const err = $('#lg-err'); err.classList.add('hidden');
+    if (!email || !pass) { err.textContent = 'أدخل البريد وكلمة المرور'; err.classList.remove('hidden'); return; }
+    const btn = $('#lg-btn'); const orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+    try {
+      const admin = await TW.login(email, pass);
+      enterApp(admin);
+    } catch (e) {
+      err.textContent = e.message; err.classList.remove('hidden');
+      btn.disabled = false; btn.innerHTML = orig;
+    }
   };
-  $('#cfg-url').addEventListener('keydown',e=>{if(e.key==='Enter')$('#cfg-save').click();});
-  $('#cfg-key').addEventListener('keydown',e=>{if(e.key==='Enter')$('#cfg-save').click();});
-
-  $('#btn-logout').onclick = ()=>{ if(confirm('تغيير بيانات الاتصال؟')){ TW.clear(); location.reload(); } };
-  $('#btn-refresh').onclick = ()=>loadData(true);
-  $('#menu-toggle').onclick = ()=>toggleSidebar(true);
-  $('#scrim').onclick = ()=>toggleSidebar(false);
-  $('#nav').addEventListener('click', ()=>{ if(window.innerWidth<=860) toggleSidebar(false); });
-
-  window.addEventListener('hashchange', route);
-  boot();
-});
-
-function showCfgErr(m){ const e=$('#cfg-err'); e.textContent=m; e.classList.remove('hidden'); }
-function toggleSidebar(open){ $('#sidebar').classList.toggle('open',open); $('#scrim').classList.toggle('show',open); }
-
-function boot(){
-  if(!TW.configured){ $('#setup').classList.remove('hidden'); $('#app').classList.add('hidden'); return; }
-  $('#setup').classList.add('hidden'); $('#app').classList.remove('hidden');
-  if(!location.hash) location.hash='#/';
-  loadData(false).then(()=>route());
+  $('#lg-btn').onclick = doLogin;
+  $('#lg-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  $('#lg-email').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 }
 
-/* ---------- تحميل بيانات اللوحة ---------- */
-async function loadData(refresh){
-  if(APP.loading) return;
-  APP.loading=true; $('#conn-dot').classList.remove('bad');
-  if(refresh){ view().innerHTML = UI.skeletonCards(8); }
-  try{
-    APP.data = await TW.call('testweb_dashboard');
-    $('#conn-dot').classList.remove('bad');
-    if(refresh){ UI.toast('تم تحديث البيانات','ok',1600); route(); }
-  }catch(e){
-    $('#conn-dot').classList.add('bad');
-    if(refresh) UI.toast(e.message,'err');
-    view().innerHTML = UI.errorBox(e.message + ' — تأكد من رفع دوال testweb_ وصحة الرابط');
-  }finally{ APP.loading=false; }
+function adminTitleText(a) {
+  const isF = a.gender === 'female';
+  if (a.type === 'owner') return isF ? 'المسؤولة الإدارية' : 'المسؤول الإداري';
+  return isF ? 'الإدارية' : 'الإداري';
 }
 
-/* ---------- التوجيه ---------- */
-function route(){
-  const h = (location.hash||'#/').slice(1);
-  const [path, id] = [ h.split('/').slice(0,2).join('/'), h.split('/')[2] ];
-  // تفعيل عنصر القائمة
-  document.querySelectorAll('#nav a').forEach(a=>{
-    const r=a.getAttribute('data-route');
-    a.classList.toggle('active', r===h || (r!=='/' && h.startsWith(r)) );
-  });
-  const titles={ '/':'النظرة العامة','/students':'الطلاب','/teachers':'المشرفون','/messages':'الرسائل','/otps':'رموز الدخول','/student':'ملف الطالب','/teacher':'ملف المشرف' };
-  $('#page-title').textContent = titles[path] || 'لوحة التحكم';
+function enterApp(admin) {
+  APP.admin = admin;
+  $('#boot').classList.add('hidden');
+  $('#login').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  $('#admin-line').textContent = `${adminTitleText(admin)} ${admin.name}`;
+  buildNav();
+  wireShell();
+  router();
+}
 
-  if(!APP.data && path!=='/otps'){ view().innerHTML=UI.skeletonCards(8); return; }
+function buildNav() {
+  const nav = $('#nav');
+  nav.innerHTML = NAV_ITEMS
+    .filter(n => !n.ownerOnly || APP.admin.type === 'owner')
+    .map(n => `<a href="#/${n.id}" data-id="${n.id}">${icon(n.ic, 18)}<span>${n.label}</span></a>`)
+    .join('');
+}
 
-  if(h==='/' || h===''){ pageOverview(); }
-  else if(h==='/students'){ pageStudents(); }
-  else if(h==='/teachers'){ pageTeachers(); }
-  else if(h==='/messages'){ pageMessages(); }
-  else if(h==='/otps'){ pageOtps(); }
-  else if(path==='/student' && id){ pageStudentDetail(id); }
-  else if(path==='/teacher' && id){ pageTeacherDetail(id); }
-  else pageOverview();
-  window.scrollTo(0,0);
+function wireShell() {
+  $('#btn-logout').onclick = () => { TW.logout(); location.reload(); };
+  $('#btn-refresh').onclick = async () => { APP.dash = null; await getDash(true); router(true); UI.toast('تم تحديث البيانات', 'ok', 1500); };
+  $('#menu-toggle').onclick = () => $('#app').classList.add('nav-open');
+  $('#scrim').onclick = () => $('#app').classList.remove('nav-open');
+  $('#nav').addEventListener('click', () => $('#app').classList.remove('nav-open'));
+  window.addEventListener('hashchange', () => router());
+}
+
+function setActiveNav(page) {
+  document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.getAttribute('data-id') === page));
+  $('#page-title').textContent = TITLES[page] || '';
+}
+
+/* ================= بيانات اللوحة (مخزّنة محلياً) ================= */
+async function getDash(force) {
+  if (APP.dash && !force) return APP.dash;
+  APP.dash = await TW.call('testweb_dashboard');
+  return APP.dash;
+}
+
+/* ================= التوجيه ================= */
+const DASH_PAGES = new Set(['overview', 'students', 'teachers', 'messages', 'add-student', 'add-teacher']);
+
+async function router() {
+  const parts = (location.hash || '#/overview').slice(2).split('/').filter(Boolean);
+  const page = parts[0] || 'overview';
+  const id = parts[1] ? decodeURIComponent(parts[1]) : null;
+  setActiveNav(page);
+
+  if (page === 'admins' && APP.admin.type !== 'owner') { location.hash = '#/overview'; return; }
+
+  if (DASH_PAGES.has(page) && !APP.dash) {
+    view().innerHTML = `<div class="empty-state"><span class="spinner lg"></span></div>`;
+    try { await getDash(false); } catch (e) { view().innerHTML = UI.errorBox(e.message); return; }
+  }
+
+  try {
+    switch (page) {
+      case 'overview': return pageOverview();
+      case 'students': return id ? pageStudentDetail(id) : pageStudents();
+      case 'teachers': return id ? pageTeacherDetail(id) : pageTeachers();
+      case 'messages': return pageMessages();
+      case 'otps': return pageOtps();
+      case 'holidays': return pageHolidays();
+      case 'logs': return pageLogs();
+      case 'admins': return pageAdmins();
+      case 'today-log': return pageTodayLog();
+      case 'full-log': return id ? pageFullLogStudent(id) : pageFullLog();
+      case 'add-student': return pageAddStudent();
+      case 'add-teacher': return pageAddTeacher();
+      default: return pageOverview();
+    }
+  } catch (e) {
+    view().innerHTML = UI.errorBox(e.message);
+  }
+}
+
+/* ================= أدوات نماذج ومودالات ================= */
+function fieldHtml(label, name, value, type = 'text') {
+  return `<div class="field"><label>${UI.esc(label)}</label><input class="f-input" data-k="${name}" type="${type}" value="${UI.esc(value ?? '')}"></div>`;
+}
+function selectHtml(label, name, value, options) {
+  const opts = options.map(([v, l]) => `<option value="${UI.esc(v)}" ${String(value) === String(v) ? 'selected' : ''}>${UI.esc(l)}</option>`).join('');
+  return `<div class="field"><label>${UI.esc(label)}</label><select class="f-input" data-k="${name}">${opts}</select></div>`;
+}
+function textareaHtml(label, name, value, placeholder = '') {
+  return `<div class="field"><label>${UI.esc(label)}</label><textarea class="f-input" data-k="${name}" placeholder="${UI.attr(placeholder)}" rows="4">${UI.esc(value ?? '')}</textarea></div>`;
+}
+function collectFields(root) {
+  const o = {};
+  root.querySelectorAll('.f-input').forEach(el => { o[el.getAttribute('data-k')] = el.value; });
+  return o;
+}
+function teacherOptions() {
+  return (APP.dash?.teachers ?? []).map(t => [t.teacher_id, t.full_name]);
+}
+
+async function runAction(btn, fn, opts = {}) {
+  const orig = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fn();
+    if (opts.okMsg) UI.toast(opts.okMsg, 'ok');
+    if (opts.modal) opts.modal.close();
+    if (opts.refreshDash !== false) await getDash(true);
+    if (opts.after) await opts.after(res);
+    return res;
+  } catch (e) {
+    UI.toast(e.message, 'err', 4500);
+    btn.disabled = false; btn.innerHTML = orig;
+    throw e;
+  }
+}
+
+function kvGrid(pairs) {
+  return `<div class="kv" style="margin-top:14px">${pairs.map(([k, v]) => `<b>${UI.esc(k)}</b><span>${v}</span>`).join('')}</div>`;
+}
+function flexRow(html, justify = 'flex-start') {
+  return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:${justify}">${html}</div>`;
 }
 
 /* ================= النظرة العامة ================= */
-function pageOverview(){
-  const s = APP.data.stats;
-  const stat=(cls,ic,val,lbl)=>`<div class="stat ${cls}"><div class="ic">${ic}</div><div class="v" data-count="${val}">0</div><div class="l">${lbl}</div></div>`;
+function pageOverview() {
+  const s = APP.dash.stats;
+  const statCard = (ic, num, lbl) => `<div class="stat-card">${icon(ic, 22)}<div class="num" style="margin-top:10px">${num}</div><div class="lbl">${UI.esc(lbl)}</div></div>`;
   const cards = [
-    stat('a','🎓',s.students_total,'إجمالي الطلاب'),
-    stat('b','👤',s.teachers_total,'المشرفون'),
-    stat('g','✅',s.active_saves,'حفظات نشطة'),
-    stat('gold','📝',s.in_exam,'في الاختبار'),
-    stat('t','🏆',s.finished_saves,'حفظات مكتملة'),
-    stat('r','⛔',s.suspended_saves,'حفظات موقوفة'),
-    stat('p','⏳',s.not_joined,'لم ينضمّوا بعد'),
-    stat('r','⚠️',s.profile_incomplete,'ملفات ناقصة'),
-    stat('gold','🚫',s.with_absence,'لديهم غياب'),
-    stat('t','📊',s.avg_progress,'متوسط التقدّم %'),
+    statCard('students', s.students_total, 'إجمالي الطلاب'),
+    statCard('teacher', s.teachers_total, 'المشرفون'),
+    statCard('check', s.active_saves, 'حفظات نشطة'),
+    statCard('exam', s.in_exam, 'في الاختبار'),
+    statCard('star', s.finished_saves, 'حفظات مكتملة'),
+    statCard('ban', s.suspended_saves, 'حفظات موقوفة'),
+    statCard('clock', s.not_joined, 'لم ينضمّوا بعد'),
+    statCard('alert', s.profile_incomplete, 'ملفات ناقصة'),
+    statCard('holiday', s.with_absence, 'لديهم غياب'),
+    statCard('records', s.avg_progress + '%', 'متوسط التقدّم'),
   ].join('');
 
-  // توزيع الطلاب حسب حالة الحفظة
-  const byStatus = {};
-  APP.data.students.forEach(st=>{ const k = st.save? st.save.status_label : 'بدون حفظة'; byStatus[k]=(byStatus[k]||0)+1; });
-  const maxS = Math.max(1, ...Object.values(byStatus));
-  const distRows = Object.entries(byStatus).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`
-    <div class="mb"><div class="flex between" style="font-size:13px;margin-bottom:5px"><b>${UI.esc(k)}</b><span class="muted">${v}</span></div>
-    <div class="progress"><i data-w="${Math.round(v/maxS*100)}"></i></div></div>`).join('');
-
-  // أعلى المشرفين بعدد الطلاب
-  const topT = [...APP.data.teachers].sort((a,b)=>b.students_count-a.students_count).slice(0,6).map(t=>`
-    <div class="mini-row"><div class="flex center gap"><div class="avatar ${t.gender==='female'?'female':''}" style="width:36px;height:36px;font-size:14px">${UI.esc(UI.initials(t.full_name))}</div>
-    <b style="font-size:14px">${UI.esc(t.full_name)}</b></div><span class="badge info">${t.students_count} طالب</span></div>`).join('') || UI.empty('لا مشرفين');
-
-  // نسبة الانضمام
-  const joinPct = s.students_total? Math.round((s.students_total-s.not_joined)/s.students_total*100):0;
+  const topT = [...APP.dash.teachers].sort((a, b) => b.students_count - a.students_count).slice(0, 6).map(t => `
+    <div class="entity-card" onclick="location.hash='#/teachers/${UI.attr(t.teacher_id)}'">
+      <div class="avatar">${icon('teacher', 20)}</div>
+      <div class="entity-info"><div class="name">${UI.esc(t.full_name)}</div><div class="sub">${UI.esc(t.gender_label)}</div></div>
+      ${UI.badge('blue', t.students_count + ' طالب')}
+    </div>`).join('') || UI.empty('لا مشرفين', 'teacher');
 
   view().innerHTML = `
-    <div class="stats-grid">${cards}</div>
-    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">
-      <div class="card card-pad">
-        <div class="section-head" style="margin-top:0"><h2>توزيع الطلاب حسب الحالة</h2></div>
-        ${distRows||UI.empty('لا بيانات')}
-      </div>
-      <div class="card card-pad" style="text-align:center">
-        <div class="section-head" style="margin-top:0"><h2>نسبة الانضمام للتطبيق</h2></div>
-        <div class="ring" style="--p:${joinPct};margin:10px auto"><div class="hole"><div><b>${joinPct}%</b><br><span>انضمّوا</span></div></div></div>
-        <div class="muted" style="font-size:13px">${s.students_total - s.not_joined} من ${s.students_total} طالب فعّلوا حساباتهم</div>
-      </div>
-      <div class="card card-pad">
-        <div class="section-head" style="margin-top:0"><h2>أكثر المشرفين طلاباً</h2></div>
-        <div class="pill-list">${topT}</div>
-      </div>
+    <div class="cards-grid">${cards}</div>
+    <div class="panel">
+      <div class="panel-head"><h2>أكثر المشرفين طلاباً</h2></div>
+      <div style="display:grid;gap:10px">${topT}</div>
     </div>`;
-  // عدّادات + أشرطة
-  view().querySelectorAll('.stat .v[data-count]').forEach(el=>UI.countUp(el, Number(el.getAttribute('data-count'))));
-  UI.animateBars(view());
-  view().querySelectorAll('.stat').forEach((s,i)=>s.style.animationDelay=(i*0.04)+'s');
 }
 
 /* ================= الطلاب ================= */
-function pageStudents(){
-  const f=APP.filters;
-  const statusChips=[
-    ['all','الكل'],['active','نشط'],['in_exam','في الاختبار'],['finished','مكتمل'],
-    ['suspended','موقوف'],['terminated','منهي'],['not_joined','لم ينضمّوا'],
-    ['no_save','بدون حفظة'],['incomplete','ملف ناقص'],['absence','لديهم غياب'],
-  ];
-  const counts = countStudents();
-  const chips = statusChips.map(([k,l])=>`<button class="chip ${f.stStatus===k?'active':''}" onclick="setStFilter('${k}')">${l} <span class="n">${counts[k]??0}</span></button>`).join('');
+const stFilters = { status: 'all', gender: 'all', q: '', sort: 'name' };
+const ST_STATUS = [
+  ['all', 'الكل'], ['active', 'نشط'], ['in_exam', 'في الاختبار'], ['finished', 'مكتمل'],
+  ['suspended', 'موقوف'], ['terminated', 'منهي'], ['not_joined', 'لم ينضمّوا'],
+  ['no_save', 'بدون حفظة'], ['incomplete', 'ملف ناقص'], ['absence', 'لديهم غياب'],
+];
+const ST_PRED = {
+  active: s => s.save && s.save.status === 'ACTIVE',
+  in_exam: s => s.save && (s.save.status === 'IN_EXAM1' || s.save.status === 'IN_EXAM2'),
+  finished: s => s.save && s.save.status === 'FINISHED',
+  suspended: s => s.save && s.save.status === 'SUSPENDED',
+  terminated: s => s.save && s.save.status === 'TERMINATED',
+  not_joined: s => !s.joined, no_save: s => !s.save,
+  incomplete: s => s.profile_incomplete, absence: s => s.absence_total > 0,
+};
+
+function pageStudents() {
+  const counts = { all: APP.dash.students.length };
+  for (const k in ST_PRED) counts[k] = APP.dash.students.filter(ST_PRED[k]).length;
+  const chips = ST_STATUS.map(([k, l]) => `<button class="btn btn-sm ${stFilters.status === k ? 'btn-primary' : 'btn-ghost'}" onclick="setStFilter('${k}')">${l} (${counts[k] ?? 0})</button>`).join('');
 
   view().innerHTML = `
-    <div class="toolbar">
-      <div class="search"><input id="st-q" placeholder="ابحث بالاسم أو رقم الهاتف (٠٧٧...)" value="${UI.esc(f.stQ)}"></div>
-      <select class="input" id="st-gender">
-        <option value="all">كل الأجناس</option><option value="male">ذكور</option><option value="female">إناث</option>
-      </select>
-      <select class="input" id="st-sort">
-        <option value="name">ترتيب: الاسم</option><option value="progress">الأعلى تقدّماً</option>
-        <option value="absence">الأكثر غياباً</option><option value="newest">الأحدث تسجيلاً</option>
-      </select>
-      <button class="btn btn-soft" onclick="location.hash='#/messages'">✉ رسالة جماعية</button>
+    <div class="panel">
+      <div class="toolbar">
+        <div class="search-box">${icon('search', 16)}<input id="st-q" placeholder="ابحث بالاسم أو الهاتف" value="${UI.esc(stFilters.q)}"></div>
+        <select class="f-input" id="st-gender" style="width:auto"><option value="all">كل الأجناس</option><option value="male">ذكور</option><option value="female">إناث</option></select>
+        <select class="f-input" id="st-sort" style="width:auto">
+          <option value="name">ترتيب: الاسم</option><option value="progress">الأعلى تقدّماً</option>
+          <option value="absence">الأكثر غياباً</option><option value="newest">الأحدث تسجيلاً</option>
+        </select>
+        <a class="btn btn-primary" href="#/add-student">${icon('plus', 15)} إضافة طالب</a>
+      </div>
+      <div class="quick-states" style="margin-top:14px">${chips}</div>
     </div>
-    <div class="chips">${chips}</div>
-    <div id="st-grid"></div>`;
+    <div id="st-list"></div>`;
 
-  $('#st-gender').value=f.stGender; $('#st-sort').value=f.stSort;
-  $('#st-q').addEventListener('input', e=>{ f.stQ=e.target.value; renderStudentGrid(); });
-  $('#st-gender').addEventListener('change', e=>{ f.stGender=e.target.value; renderStudentGrid(); });
-  $('#st-sort').addEventListener('change', e=>{ f.stSort=e.target.value; renderStudentGrid(); });
-  renderStudentGrid();
+  $('#st-gender').value = stFilters.gender; $('#st-sort').value = stFilters.sort;
+  $('#st-q').addEventListener('input', e => { stFilters.q = e.target.value; renderStudentList(); });
+  $('#st-gender').addEventListener('change', e => { stFilters.gender = e.target.value; renderStudentList(); });
+  $('#st-sort').addEventListener('change', e => { stFilters.sort = e.target.value; renderStudentList(); });
+  renderStudentList();
 }
+function setStFilter(k) { stFilters.status = k; pageStudents(); }
 
-function countStudents(){
-  const c={all:APP.data.students.length};
-  const test={
-    active:s=>s.save&&s.save.status==='ACTIVE', in_exam:s=>s.save&&(s.save.status==='IN_EXAM1'||s.save.status==='IN_EXAM2'),
-    finished:s=>s.save&&s.save.status==='FINISHED', suspended:s=>s.save&&s.save.status==='SUSPENDED',
-    terminated:s=>s.save&&s.save.status==='TERMINATED', not_joined:s=>!s.joined,
-    no_save:s=>!s.save, incomplete:s=>s.profile_incomplete, absence:s=>s.absence_total>0,
+function filteredStudents() {
+  let list = [...APP.dash.students];
+  const pred = ST_PRED[stFilters.status];
+  if (pred) list = list.filter(pred);
+  if (stFilters.gender !== 'all') list = list.filter(s => s.gender === stFilters.gender);
+  const q = stFilters.q.trim().toLowerCase();
+  if (q) list = list.filter(s => (s.full_name || '').toLowerCase().includes(q) || (s.phone || '').includes(q));
+  const sorters = {
+    name: (a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'ar'),
+    progress: (a, b) => (b.save?.progress_pct || 0) - (a.save?.progress_pct || 0),
+    absence: (a, b) => b.absence_total - a.absence_total,
+    newest: (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0),
   };
-  for(const k in test) c[k]=APP.data.students.filter(test[k]).length;
-  return c;
-}
-function setStFilter(k){ APP.filters.stStatus=k; pageStudents(); }
-
-function filteredStudents(){
-  const f=APP.filters; let list=[...APP.data.students];
-  const pred={
-    active:s=>s.save&&s.save.status==='ACTIVE', in_exam:s=>s.save&&(s.save.status==='IN_EXAM1'||s.save.status==='IN_EXAM2'),
-    finished:s=>s.save&&s.save.status==='FINISHED', suspended:s=>s.save&&s.save.status==='SUSPENDED',
-    terminated:s=>s.save&&s.save.status==='TERMINATED', not_joined:s=>!s.joined,
-    no_save:s=>!s.save, incomplete:s=>s.profile_incomplete, absence:s=>s.absence_total>0,
-  }[f.stStatus];
-  if(pred) list=list.filter(pred);
-  if(f.stGender!=='all') list=list.filter(s=>s.gender===f.stGender);
-  const q=f.stQ.trim();
-  if(q){ const ql=q.toLowerCase(); list=list.filter(s=>
-    (s.full_name||'').toLowerCase().includes(ql) || (s.phone||'').includes(q) || (s.father_phone||'').includes(q)); }
-  const sorters={
-    name:(a,b)=>(a.full_name||'').localeCompare(b.full_name||'','ar'),
-    progress:(a,b)=>(b.save?.progress_pct||0)-(a.save?.progress_pct||0),
-    absence:(a,b)=>b.absence_total-a.absence_total,
-    newest:(a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0),
-  };
-  list.sort(sorters[f.stSort]||sorters.name);
+  list.sort(sorters[stFilters.sort] || sorters.name);
   return list;
 }
 
-function renderStudentGrid(){
-  const list=filteredStudents();
-  const wrap=$('#st-grid'); if(!wrap) return;
-  if(!list.length){ wrap.innerHTML=UI.empty('لا يوجد طلاب مطابقون','🔍'); return; }
-  wrap.innerHTML=`<div class="section-head"><span class="sub">${list.length} طالب</span></div><div class="grid">${list.map(studentCard).join('')}</div>`;
-  UI.animateBars(wrap);
-  wrap.querySelectorAll('.pcard').forEach((c,i)=>c.style.animationDelay=(Math.min(i,20)*0.02)+'s');
+function renderStudentList() {
+  const list = filteredStudents();
+  const wrap = $('#st-list'); if (!wrap) return;
+  if (!list.length) { wrap.innerHTML = UI.empty('لا يوجد طلاب مطابقون', 'search'); return; }
+  wrap.innerHTML = `<div class="panel"><div style="display:grid;gap:10px">${list.map(studentRow).join('')}</div></div>`;
 }
 
-function studentCard(s){
-  const sv=s.save;
-  const badges=[];
-  if(!s.joined) badges.push(UI.badge('warn','لم ينضمّ'));
-  if(s.profile_incomplete) badges.push(UI.badge('no','ملف ناقص'));
-  if(s.absence_total>0) badges.push(UI.badge('absent','غياب '+s.absence_total));
-  const statusB = sv? UI.badge('info', sv.status_label) : UI.badge('neutral','بدون حفظة');
-  const prog = sv? `<div class="mt">${UI.progress(sv.progress_pct)}<div class="muted" style="font-size:12px;margin-top:4px">${UI.esc(sv.name)} • ${sv.saved_pages}/${sv.total_pages} صفحة</div></div>` : '';
-  return `<div class="pcard" onclick="location.hash='#/student/${UI.attr(s.user_id)}'">
-    <div class="pcard-top">
-      <div class="avatar ${s.gender==='female'?'female':''}">${UI.esc(UI.initials(s.full_name))}</div>
-      <div class="pcard-id"><div class="nm">${UI.esc(s.full_name||'—')}</div>
-        <div class="mt"><span>${UI.esc(s.gender_label)}</span> • <span dir="ltr">${UI.esc(s.phone||'—')}</span></div></div>
+function studentRow(s) {
+  const badges = [];
+  if (!s.joined) badges.push(UI.badge('gold', 'لم ينضمّ'));
+  if (s.profile_incomplete) badges.push(UI.badge('red', 'ملف ناقص'));
+  if (s.absence_total > 0) badges.push(UI.badge('gray', 'غياب ' + s.absence_total));
+  const statusB = s.save ? UI.badge('blue', s.save.status_label) : UI.badge('gray', 'بدون حفظة');
+  const prog = s.save ? `<div class="progress-bar" style="width:150px"><div style="width:${s.save.progress_pct}%"></div></div>` : '';
+  return `<div class="entity-card" onclick="location.hash='#/students/${UI.attr(s.user_id)}'">
+    <div class="avatar">${icon('students', 20)}</div>
+    <div class="entity-info">
+      <div class="name">${UI.esc(s.full_name || '—')} <span style="color:var(--muted);font-weight:400">— ${UI.esc(s.gender_label)}</span></div>
+      <div class="sub" dir="ltr">${UI.esc(s.phone || '—')} <span dir="rtl">• المشرف: ${UI.esc(s.teacher_name || '—')}</span></div>
+      ${prog}
     </div>
-    <div class="flex wrap gap" style="gap:6px">${statusB}${badges.join('')}</div>
-    ${prog}
-    <div class="pcard-foot"><span>المشرف: ${UI.esc(s.teacher_name)}</span><span>↩ التفاصيل</span></div>
-  </div>`;
-}
-
-/* ================= المشرفون ================= */
-function pageTeachers(){
-  const f=APP.filters;
-  view().innerHTML=`
-    <div class="toolbar">
-      <div class="search"><input id="t-q" placeholder="ابحث باسم المشرف أو رقم الهاتف" value="${UI.esc(f.tQ)}"></div>
-      <select class="input" id="t-sort">
-        <option value="students">ترتيب: عدد الطلاب</option><option value="name">الاسم</option>
-        <option value="absence">الأكثر غياباً</option>
-      </select>
-      <button class="btn btn-soft" onclick="location.hash='#/messages'">✉ رسالة للمشرفين</button>
-    </div>
-    <div id="t-grid"></div>`;
-  $('#t-sort').value=f.tSort;
-  $('#t-q').addEventListener('input',e=>{f.tQ=e.target.value;renderTeacherGrid();});
-  $('#t-sort').addEventListener('change',e=>{f.tSort=e.target.value;renderTeacherGrid();});
-  renderTeacherGrid();
-}
-function renderTeacherGrid(){
-  const f=APP.filters; let list=[...APP.data.teachers];
-  const q=f.tQ.trim();
-  if(q){const ql=q.toLowerCase();list=list.filter(t=>(t.full_name||'').toLowerCase().includes(ql)||(t.phone||'').includes(q));}
-  const sorters={students:(a,b)=>b.students_count-a.students_count,name:(a,b)=>(a.full_name||'').localeCompare(b.full_name||'','ar'),absence:(a,b)=>b.absence_total-a.absence_total};
-  list.sort(sorters[f.tSort]||sorters.students);
-  const wrap=$('#t-grid');
-  if(!list.length){wrap.innerHTML=UI.empty('لا مشرفين مطابقين','🔍');return;}
-  wrap.innerHTML=`<div class="section-head"><span class="sub">${list.length} مشرف</span></div><div class="grid">${list.map(teacherCard).join('')}</div>`;
-  wrap.querySelectorAll('.pcard').forEach((c,i)=>c.style.animationDelay=(Math.min(i,20)*0.02)+'s');
-}
-function teacherCard(t){
-  return `<div class="pcard" onclick="location.hash='#/teacher/${UI.attr(t.teacher_id)}'">
-    <div class="pcard-top">
-      <div class="avatar ${t.gender==='female'?'female':''}">${UI.esc(UI.initials(t.full_name))}</div>
-      <div class="pcard-id"><div class="nm">${UI.esc(t.full_name||'—')}</div>
-        <div class="mt"><span>${UI.esc(t.gender_label)}</span> • <span dir="ltr">${UI.esc(t.phone||'—')}</span></div></div>
-    </div>
-    <div class="flex wrap gap" style="gap:6px">
-      ${UI.badge('info',t.students_count+' طالب')}
-      ${t.joined?UI.badge('ok','منضمّ'):UI.badge('warn','لم ينضمّ')}
-      ${t.absence_total>0?UI.badge('absent','غياب '+t.absence_total):''}
-    </div>
-    <div class="pcard-foot"><span>انضمّ: ${UI.fmtDateShort(t.joined_in)}</span><span>↩ التفاصيل</span></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${statusB}${badges.join('')}</div>
   </div>`;
 }
 
 /* ================= ملف الطالب ================= */
-async function pageStudentDetail(id){
-  view().innerHTML=`<div class="skeleton sk-card" style="height:200px;margin-bottom:14px"></div>${UI.skeletonCards(3)}`;
+async function pageStudentDetail(id) {
+  view().innerHTML = `<div class="empty-state"><span class="spinner lg"></span></div>`;
   let res;
-  try{ res=await TW.call('testweb_student',{user_id:id}); }
-  catch(e){ view().innerHTML=UI.errorBox(e.message); return; }
-  APP.current={type:'student',data:res};
-  const u=res.user, saves=res.saves;
+  try { res = await TW.call('testweb_student', { user_id: id }); }
+  catch (e) { view().innerHTML = UI.errorBox(e.message); return; }
+  APP.current = res;
+  const u = res.user, saves = res.saves;
 
   const avatar = u.photo_url
-    ? `<div class="avatar" style="width:78px;height:78px"><img src="${UI.esc(u.photo_url)}" alt=""></div>`
-    : `<div class="avatar ${u.gender==='female'?'female':''}" style="width:78px;height:78px;font-size:28px">${UI.esc(UI.initials(u.full_name))}</div>`;
+    ? `<div class="avatar" style="width:78px;height:78px"><img src="${UI.esc(u.photo_url)}"></div>`
+    : `<div class="avatar" style="width:78px;height:78px">${icon('students', 30)}</div>`;
 
-  const tags=[];
-  tags.push(u.joined?UI.badge('ok','منضمّ'):UI.badge('warn','لم ينضمّ بعد'));
-  if(u.profile_incomplete) tags.push(UI.badge('no','ملف ناقص'));
-  if(u.absence_total>0) tags.push(UI.badge('absent','غياب: '+u.absence_total));
+  const badges = [];
+  badges.push(u.joined ? UI.badge('green', 'منضمّ') : UI.badge('gold', 'لم ينضمّ بعد'));
+  if (u.profile_incomplete) badges.push(UI.badge('red', 'ملف ناقص'));
+  if (u.absence_total > 0) badges.push(UI.badge('gray', 'غياب: ' + u.absence_total));
 
-  const info=(k,v)=>`<div class="info"><div class="k">${k}</div><div class="v">${v}</div></div>`;
-  const profileInfo=`<div class="info-grid mt">
-    ${info('رقم الهاتف', UI.copyField(u.phone))}
-    ${info('هاتف ولي الأمر', UI.copyField(u.father_phone))}
-    ${info('كلمة المرور', UI.pwField(u.password))}
-    ${info('البريد', UI.copyField(u.email))}
-    ${info('الجنس', u.gender_label)}
-    ${info('تاريخ الميلاد', UI.esc(u.date_of_brith))}
-    ${info('المشرف', UI.esc(u.teacher_name))}
-    ${info('العنوان', UI.esc(u.location))}
-    ${info('الموقع (GPS)', UI.copyField(u.gps))}
-    ${info('آخر دخول', UI.fmtDate(u.last_logined_in))}
-    ${info('تاريخ التسجيل', UI.fmtDate(u.created_at))}
-    ${info('معرّف الطالب', UI.copyField(u.user_id))}
-  </div>`;
+  const info = kvGrid([
+    ['رقم الهاتف', UI.copyField(u.phone)],
+    ['هاتف ولي الأمر', UI.copyField(u.father_phone)],
+    ['كلمة المرور', UI.pwField(u.password)],
+    ['البريد', UI.copyField(u.email)],
+    ['الجنس', UI.esc(u.gender_label)],
+    ['تاريخ الميلاد', UI.esc(u.date_of_brith)],
+    ['المشرف', UI.esc(u.teacher_name)],
+    ['العنوان', UI.esc(u.location)],
+    ['الموقع (GPS)', UI.copyField(u.gps)],
+    ['آخر دخول', UI.fmtDate(u.last_logined_in)],
+    ['تاريخ التسجيل', UI.fmtDate(u.created_at)],
+    ['معرّف الطالب', UI.copyField(u.user_id)],
+  ]);
 
-  const head=`<div class="card card-pad mb">
-    <div class="flex between wrap gap">
-      <div class="flex center gap" style="gap:16px">
-        ${avatar}
-        <div><div style="font-size:22px;font-weight:800">${UI.esc(u.full_name||'—')}</div>
-        <div class="flex wrap gap mt" style="gap:6px">${tags.join('')}</div></div>
-      </div>
-      <div class="row-actions">
-        <button class="btn btn-soft btn-sm" onclick="openEditStudent()">✎ تعديل الملف</button>
-        <button class="btn btn-soft btn-sm" onclick="openSetPassword('student','${UI.attr(u.user_id)}','${UI.attr(u.full_name)}')">🔒 كلمة المرور</button>
-        <button class="btn btn-primary btn-sm" onclick="openSendOne('${UI.attr(u.phone)}','${UI.attr(u.full_name)}')">✉ رسالة</button>
-      </div>
-    </div>
-    ${profileInfo}
-  </div>`;
+  const savesHtml = saves.length ? saves.map(saveBlock).join('') : `<div class="panel">${UI.empty('لا توجد حفظات لهذا الطالب', 'records')}</div>`;
 
-  const savesHtml = saves.length
-    ? saves.map(saveBlock).join('')
-    : `<div class="card card-pad">${UI.empty('لا توجد حفظات لهذا الطالب','📚')}</div>`;
-
-  view().innerHTML = `<button class="btn btn-ghost btn-sm mb" onclick="history.back()">→ رجوع</button>${head}
-    <div class="section-head"><h2>الحفظات (${saves.length})</h2></div>${savesHtml}`;
-  UI.animateBars(view());
-}
-
-function saveBlock(s){
-  const cur = s.is_current ? UI.badge('ok','الحفظة الحالية') : '';
-  const examInfo = (s.exam1||s.exam2) ? `<div class="muted" style="font-size:12px">
-    ${s.exam1?`جزئي: ${UI.esc(s.exam1_teacher_name)}`:''} ${s.exam2?` • تراكمي: ${UI.esc(s.exam2_teacher_name)}`:''}</div>`:'';
-  const info=(k,v)=>`<div class="info"><div class="k">${k}</div><div class="v">${v}</div></div>`;
-  const grid=`<div class="info-grid mt">
-    ${info('الحالة', UI.badge('info',s.status_label))}
-    ${info('من صفحة', UI.esc(s.start_page))}
-    ${info('إلى صفحة', UI.esc(s.end_page))}
-    ${info('الورد اليومي', UI.esc(s.every_day_page))}
-    ${info('المُنجز', s.saved_pages+' / '+s.total_pages+' صفحة')}
-    ${info('المشرف', UI.esc(s.teacher_name))}
-    ${info('بدأت', UI.fmtDateShort(s.started_at))}
-    ${info('اكتملت', UI.fmtDateShort(s.finished_at))}
-  </div>`;
-  const pagesTab = pagesTable(s.pages, false, s.id);
-  const testsTab = pagesTable(s.tests, true, s.id);
-  const sid=UI.attr(String(s.id));
-  return `<div class="save-block" id="sb-${sid}">
-    <div class="save-head" onclick="toggleSave('${sid}')">
-      <span class="caret">▼</span>
-      <span class="nm">${UI.esc(s.name||'حفظة')}</span>
-      ${cur}
-      <span class="sp"></span>
-      <span class="badge info">${s.progress_pct}%</span>
-      <span class="badge ${s.status==='ACTIVE'?'ok':s.status==='SUSPENDED'?'no':'neutral'}">${UI.esc(s.status_label)}</span>
-    </div>
-    <div class="save-body">
-      <div class="flex between center wrap gap mt">
-        <div style="flex:1;min-width:200px">${UI.progress(s.progress_pct)}</div>
-        <div class="row-actions">
-          <button class="btn btn-soft btn-sm" onclick="openEditSave('${sid}')">✎ تعديل الحفظة</button>
-          <button class="btn btn-soft btn-sm" onclick="openExam('${sid}','EXAM1')">📝 الاختبار الجزئي</button>
-          <button class="btn btn-soft btn-sm" onclick="openExam('${sid}','EXAM2')">📚 الاختبار التراكمي</button>
+  view().innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="history.back()" style="margin-bottom:14px">→ رجوع</button>
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:16px">
+          ${avatar}
+          <div><div style="font-size:22px;font-weight:800">${UI.esc(u.full_name || '—')}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${badges.join('')}</div></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-start">
+          <button class="btn btn-ghost btn-sm" onclick="openEditStudentModal()">${icon('edit', 14)} تعديل الملف</button>
+          <button class="btn btn-ghost btn-sm" onclick="openSetPasswordModal('student','${UI.attr(u.user_id)}','${UI.attr(u.full_name)}')">${icon('key', 14)} كلمة المرور</button>
+          <button class="btn btn-ghost btn-sm" onclick="openAddSaveModal()">${icon('plus', 14)} حفظ جديد</button>
+          <button class="btn btn-primary btn-sm" onclick="openQuickMessageModal('${UI.attr(u.phone)}','${UI.attr(u.full_name)}')">${icon('message', 14)} رسالة</button>
+          <button class="btn btn-danger btn-sm" onclick="openDeleteStudentModal()">${icon('trash', 14)} حذف</button>
         </div>
       </div>
-      ${examInfo}
-      ${grid}
-      <div class="tabs"><button class="tab active" onclick="switchTab(this,'pg-${sid}')">الحفظ اليومي (${s.pages.length})</button>
-        <button class="tab" onclick="switchTab(this,'ts-${sid}')">الاختبارات (${s.tests.length})</button></div>
-      <div id="pg-${sid}">${pagesTab}</div>
-      <div id="ts-${sid}" class="hidden">${testsTab}</div>
+      ${info}
     </div>
+    <div class="panel-head" style="margin:18px 4px 12px"><h2>الحفظات (${saves.length})</h2></div>
+    ${savesHtml}`;
+}
+
+function saveBlock(s) {
+  const cur = s.is_current ? UI.badge('green', 'الحفظة الحالية') : '';
+  const examInfo = (s.exam1 || s.exam2) ? `<div class="muted" style="font-size:12.5px;margin-top:6px">
+    ${s.exam1 ? `جزئي: ${UI.esc(s.exam1_teacher_name)}` : ''} ${s.exam2 ? ` • تراكمي: ${UI.esc(s.exam2_teacher_name)}` : ''}</div>` : '';
+  const grid = kvGrid([
+    ['الحالة', UI.badge('blue', s.status_label)],
+    ['من صفحة', UI.esc(s.start_page)], ['إلى صفحة', UI.esc(s.end_page)],
+    ['الورد اليومي', UI.esc(s.every_day_page)],
+    ['المُنجز', `${s.saved_pages} / ${s.total_pages} صفحة`],
+    ['المشرف', UI.esc(s.teacher_name)],
+    ['بدأت', UI.fmtDateShort(s.started_at)], ['اكتملت', UI.fmtDateShort(s.finished_at)],
+  ]);
+  const sid = UI.attr(String(s.id));
+  return `<div class="panel">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <b style="font-size:15px">${UI.esc(s.name || 'حفظة')}</b>${cur}
+      <span style="flex:1"></span>
+      ${UI.badge('blue', s.progress_pct + '%')}
+      ${s.status === 'ACTIVE' ? UI.badge('green', s.status_label) : s.status === 'SUSPENDED' ? UI.badge('red', s.status_label) : UI.badge('gray', s.status_label)}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-top:10px">
+      <div class="progress-bar" style="flex:1;min-width:160px"><div style="width:${s.progress_pct}%"></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="openEditSaveModal('${sid}')">${icon('edit', 13)} تعديل</button>
+        <button class="btn btn-ghost btn-sm" onclick="openExamControlModal('${sid}','EXAM1')">${icon('exam', 13)} الاختبار الجزئي</button>
+        <button class="btn btn-ghost btn-sm" onclick="openExamControlModal('${sid}','EXAM2')">${icon('exam', 13)} الاختبار التراكمي</button>
+      </div>
+    </div>
+    ${examInfo}${grid}
+    <div class="tabs" style="margin-top:16px">
+      <button class="tab active" onclick="switchSaveTab(this,'pg-${sid}')">الحفظ اليومي (${s.pages.length})</button>
+      <button class="tab" onclick="switchSaveTab(this,'ts-${sid}')">الاختبارات (${s.tests.length})</button>
+    </div>
+    <div id="pg-${sid}">${pagesTable(s.pages, false)}</div>
+    <div id="ts-${sid}" class="hidden">${pagesTable(s.tests, true)}</div>
   </div>`;
 }
 
-function pagesTable(rows, isExam, saveId){
-  if(!rows.length) return UI.empty(isExam?'لا اختبارات':'لا صفحات بعد','📄');
+function pagesTable(rows, isExam) {
+  if (!rows.length) return UI.empty(isExam ? 'لا اختبارات' : 'لا صفحات بعد', 'page');
   const head = isExam
     ? `<tr><th>النوع</th><th>الصفحات</th><th>الحالة</th><th>الأخطاء</th><th>المشرف</th><th>التاريخ</th><th></th></tr>`
     : `<tr><th>الصفحة</th><th>الاسم</th><th>الحالة</th><th>الأخطاء</th><th>المشرف</th><th>التاريخ</th><th></th></tr>`;
-  const body = rows.map(r=>{
-    const errors = errorsText(r.errors_number);
+  const body = rows.map(r => {
+    const errors = errorsText(r.errors_number, isExam);
     const cells = isExam
       ? `<td>${UI.esc(r.type_label)}</td><td>${UI.esc(r.start_page)}—${UI.esc(r.end_page)}</td>`
-      : `<td><b>${UI.esc(r.page_display)}</b></td><td class="muted">${UI.esc(r.page_name||'—')}</td>`;
-    const tbl = isExam?'tests':'pages';
+      : `<td><b>${UI.esc(r.page_display)}</b></td><td class="muted">${UI.esc(r.page_name || '—')}</td>`;
+    const tbl = isExam ? 'tests' : 'pages';
     return `<tr>${cells}
-      <td>${UI.badge(r.grade_kind, r.status_label)}</td>
+      <td>${UI.gradeBadge(r.grade_kind, r.status_label)}</td>
       <td class="muted">${errors}</td>
       <td>${UI.esc(r.teacher_name)}</td>
-      <td class="muted">${UI.fmtDateShort(r.date||r.created_at)}</td>
-      <td><button class="btn btn-soft btn-sm" onclick="openGrade('${tbl}',${r.id},${isExam})">⚖ تقييم</button></td>
+      <td class="muted">${UI.fmtDateShort(r.date || r.created_at)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openGradeModal('${tbl}',${r.id},${isExam})">${icon('check', 13)} تقييم</button></td>
     </tr>`;
   }).join('');
-  return `<div class="tbl-wrap"><table class="tbl"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="tbl-wrap" style="margin-top:14px"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
-function errorsText(e){
-  if(!e||typeof e!=='object') return '—';
-  const p=[]; if(e.sowad!=null)p.push('تسويد '+e.sowad); if(e.nisyan!=null)p.push('نسيان '+e.nisyan); if(e.fateh!=null)p.push('فتح '+e.fateh);
-  return p.join('، ')||'—';
+function errorsText(e, isExam) {
+  if (!e || typeof e !== 'object') return '—';
+  const p = [];
+  if (e.sowad != null) p.push('تسويد ' + e.sowad);
+  if (e.nisyan != null) p.push('نسيان ' + e.nisyan);
+  if (isExam && e.fateh != null) p.push('فتح ' + e.fateh);
+  return p.join('، ') || '—';
 }
-function toggleSave(id){ document.getElementById('sb-'+id)?.classList.toggle('open'); }
-function switchTab(btn,target){
-  btn.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+function switchSaveTab(btn, targetId) {
+  const tabs = btn.parentElement;
+  tabs.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
-  const cont=btn.closest('.save-body');
-  cont.querySelectorAll('[id^="pg-"],[id^="ts-"]').forEach(d=>d.classList.add('hidden'));
-  document.getElementById(target).classList.remove('hidden');
+  const panel = tabs.closest('.panel');
+  panel.querySelectorAll('[id^="pg-"],[id^="ts-"]').forEach(d => d.classList.add('hidden'));
+  panel.querySelector('#' + targetId).classList.remove('hidden');
 }
 
-/* ================= ملف المشرف ================= */
-async function pageTeacherDetail(id){
-  view().innerHTML=`<div class="skeleton sk-card" style="height:200px;margin-bottom:14px"></div>${UI.skeletonCards(3)}`;
-  let res;
-  try{ res=await TW.call('testweb_teacher',{teacher_id:id}); }
-  catch(e){ view().innerHTML=UI.errorBox(e.message); return; }
-  const t=res.teacher;
-  const avatar=t.photo_url?`<div class="avatar" style="width:78px;height:78px"><img src="${UI.esc(t.photo_url)}"></div>`
-    :`<div class="avatar ${t.gender==='female'?'female':''}" style="width:78px;height:78px;font-size:28px">${UI.esc(UI.initials(t.full_name))}</div>`;
-  const info=(k,v)=>`<div class="info"><div class="k">${k}</div><div class="v">${v}</div></div>`;
-  const grid=`<div class="info-grid mt">
-    ${info('رقم الهاتف',UI.copyField(t.phone))}
-    ${info('البريد',UI.copyField(t.email))}
-    ${info('كلمة المرور',UI.pwField(t.password))}
-    ${info('الجنس',t.gender_label)}
-    ${info('تاريخ الميلاد',UI.esc(t.date_of_brith))}
-    ${info('العنوان',UI.esc(t.location))}
-    ${info('الموقع (GPS)',UI.copyField(t.gps))}
-    ${info('عدد الغيابات',String(t.absence_total))}
-    ${info('انضمّ في',UI.fmtDate(t.joined_in))}
-    ${info('تاريخ الإنشاء',UI.fmtDate(t.created_at))}
-    ${info('معرّف المشرف',UI.copyField(t.teacher_id))}
+/* ---------- نوافذ الطالب ---------- */
+function openEditStudentModal() {
+  const u = APP.current.user;
+  const body = `<div class="form-grid">
+    ${fieldHtml('الاسم الكامل', 'full_name', u.full_name)}
+    ${selectHtml('الجنس', 'gender', u.gender, [['male', 'ذكر'], ['female', 'أنثى']])}
+    ${fieldHtml('تاريخ الميلاد', 'date_of_brith', u.date_of_brith === '—' ? '' : u.date_of_brith)}
+    ${fieldHtml('العنوان', 'user_location', u.location === '—' ? '' : u.location)}
   </div>`;
-  const stuRow=s=>`<div class="mini-row"><div><b>${UI.esc(s.full_name)}</b>
-    <div class="mt" style="font-size:12px" class="muted"><span class="muted">${UI.esc(s.save_name)} • ${UI.esc(s.save_status)}</span></div></div>
-    <button class="btn btn-soft btn-sm" onclick="location.hash='#/student/${UI.attr(s.user_id)}'">عرض</button></div>`;
-  const my=res.my_students.length?res.my_students.map(stuRow).join(''):UI.empty('لا طلاب','🎓');
-  const ex=res.exam_students.length?res.exam_students.map(s=>`<div class="mini-row"><div><b>${UI.esc(s.full_name)}</b>
-    <div class="muted" style="font-size:12px">${UI.esc(s.exam_kind)} • ${UI.esc(s.save_name)}</div></div>
-    <button class="btn btn-soft btn-sm" onclick="location.hash='#/student/${UI.attr(s.user_id)}'">عرض</button></div>`).join(''):UI.empty('لا تكليفات اختبار','📝');
-
-  view().innerHTML=`<button class="btn btn-ghost btn-sm mb" onclick="history.back()">→ رجوع</button>
-    <div class="card card-pad mb">
-      <div class="flex between wrap gap">
-        <div class="flex center gap" style="gap:16px">${avatar}
-          <div><div style="font-size:22px;font-weight:800">${UI.esc(t.full_name||'—')}</div>
-          <div class="flex wrap gap mt" style="gap:6px">${t.joined?UI.badge('ok','منضمّ'):UI.badge('warn','لم ينضمّ')}${UI.badge('info',res.counts.my+' طالب')}</div></div>
-        </div>
-        <div class="row-actions">
-          <button class="btn btn-soft btn-sm" onclick="openSetPassword('teacher','${UI.attr(t.teacher_id)}','${UI.attr(t.full_name)}')">🔒 كلمة المرور</button>
-          <button class="btn btn-primary btn-sm" onclick="openSendOne('${UI.attr(t.phone)}','${UI.attr(t.full_name)}')">✉ رسالة</button>
-        </div>
-      </div>${grid}
-    </div>
-    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(330px,1fr))">
-      <div class="card card-pad"><div class="section-head" style="margin-top:0"><h2>طلابه (${res.counts.my})</h2></div><div class="pill-list">${my}</div></div>
-      <div class="card card-pad"><div class="section-head" style="margin-top:0"><h2>تكليفات الاختبار (${res.counts.exam})</h2></div><div class="pill-list">${ex}</div></div>
-    </div>`;
-}
-
-/* ================= نوافذ الإجراءات ================= */
-function field(label,name,value,type='text'){
-  return `<div class="field"><label>${label}</label><input class="f" data-k="${name}" type="${type}" value="${UI.esc(value??'')}"></div>`;
-}
-function selField(label,name,value,options){
-  const opts=options.map(([v,l])=>`<option value="${UI.esc(v)}" ${String(value)===String(v)?'selected':''}>${UI.esc(l)}</option>`).join('');
-  return `<div class="field"><label>${label}</label><select class="f" data-k="${name}">${opts}</select></div>`;
-}
-function collect(modalEl){
-  const o={}; modalEl.querySelectorAll('.f').forEach(i=>{ o[i.getAttribute('data-k')]=i.value; }); return o;
-}
-
-function openEditStudent(){
-  const u=APP.current.data.user;
-  const body=`
-    ${field('الاسم الكامل','full_name',u.full_name)}
-    <div class="field-row">${field('رقم الهاتف','user_phone_number',u.phone)}${field('هاتف ولي الأمر','father_phone_number',u.father_phone)}</div>
-    <div class="field-row">${selField('الجنس','gender',u.gender,[['male','ذكر'],['female','أنثى']])}${field('تاريخ الميلاد','date_of_brith',u.date_of_brith)}</div>
-    ${field('العنوان','user_location',u.location)}
-    ${field('البريد الإلكتروني','email',u.email==='—'?'':u.email)}
-    <div class="field-row">
-      ${selField('منضمّ؟','joined',String(u.joined),[['true','نعم'],['false','لا']])}
-      ${selField('الملف ناقص؟','profile_incomplete',String(u.profile_incomplete),[['true','نعم'],['false','لا']])}
-    </div>`;
-  const foot=`<button class="btn btn-primary" id="md-save">حفظ التعديلات</button><button class="btn btn-ghost" onclick="closeTopModal()">إلغاء</button>`;
-  const m=UI.modal('تعديل ملف الطالب',body,foot);
-  m.el.querySelector('#md-save').onclick=async(ev)=>{
-    const f=collect(m.el); f.joined=f.joined==='true'; f.profile_incomplete=f.profile_incomplete==='true';
-    await doMutate(ev.target,{action:'update_student',user_id:u.user_id,fields:f},m,'تم حفظ بيانات الطالب');
+  const foot = `<button class="btn btn-primary" id="md-ok">حفظ التعديلات</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('تعديل ملف الطالب', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'update_student', user_id: u.user_id, fields: f }),
+      { okMsg: 'تم حفظ بيانات الطالب', modal: m, after: () => pageStudentDetail(u.user_id) });
   };
 }
 
-function openEditSave(saveId){
-  const s=APP.current.data.saves.find(x=>String(x.id)===String(saveId)); if(!s) return;
-  const teachers=APP.data.teachers.map(t=>[t.teacher_id,t.full_name]);
-  const tOpts=[['','—']].concat(teachers);
-  const body=`
-    ${field('اسم الحفظة','name',s.name)}
-    <div class="field-row">${field('من صفحة','start_page',s.start_page,'number')}${field('إلى صفحة','end_page',s.end_page,'number')}</div>
-    <div class="field-row">${field('الورد اليومي','every_day_page',s.every_day_page,'number')}${selField('الحالة','status',s.status,[['ACTIVE','نشط'],['IN_EXAM1','في الاختبار الجزئي'],['IN_EXAM2','في الاختبار التراكمي'],['FINISHED','مكتمل'],['SUSPENDED','موقوف'],['TERMINATED','منهي']])}</div>
-    ${selField('المشرف','teacher_id',s.teacher_id,tOpts)}
-    <div class="field-row">${selField('مشرف الاختبار الجزئي','exam1_teacher_id',s.exam1_teacher_id||'',tOpts)}${selField('مشرف الاختبار التراكمي','exam2_teacher_id',s.exam2_teacher_id||'',tOpts)}</div>`;
-  const foot=`<button class="btn btn-primary" id="md-save">حفظ</button><button class="btn btn-ghost" onclick="closeTopModal()">إلغاء</button>`;
-  const m=UI.modal('تعديل الحفظة',body,foot);
-  m.el.querySelector('#md-save').onclick=async(ev)=>{
-    const f=collect(m.el);
-    await doMutate(ev.target,{action:'update_save',save_id:s.id,fields:f},m,'تم حفظ بيانات الحفظة',true);
+function openSetPasswordModal(kind, id, name) {
+  const body = `<p class="muted" style="margin-bottom:14px">تعيين كلمة مرور جديدة لـ <b>${UI.esc(name)}</b>.</p>
+    ${fieldHtml('كلمة المرور الجديدة', 'password', '')}
+    <button class="btn btn-ghost btn-sm" id="md-gen">🎲 توليد كلمة قوية</button>`;
+  const foot = `<button class="btn btn-primary" id="md-ok">تعيين</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('تغيير كلمة المرور', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-gen').onclick = () => {
+    const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let p = ''; for (let i = 0; i < 10; i++) p += chars[Math.floor(Math.random() * chars.length)];
+    m.el.querySelector('.f-input').value = p;
+  };
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    if (!f.password || f.password.length < 4) { UI.toast('كلمة المرور قصيرة جداً', 'err'); return; }
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'set_password', kind, id, password: f.password }),
+      { okMsg: 'تم تغيير كلمة المرور', modal: m, refreshDash: false });
   };
 }
 
-function openGrade(table,rowId,isExam){
-  const body=`
-    <p class="muted mb">حدّد عدد الأخطاء، وسيُحتسب التقدير تلقائياً وتُرسل النتيجة للطالب ومشرفه.</p>
-    <div class="field-row">
-      ${field('التسويد (0-999)','sowad',0,'number')}
-      ${field('النسيان (0-999)','nisyan',0,'number')}
-    </div>
-    ${isExam?field('الفتح (0-999)','fateh',0,'number'):''}
-    <div class="field"><label>ملاحظة (اختياري)</label><textarea class="f" data-k="custom_info_text" placeholder="ملاحظة تظهر للطالب..."></textarea></div>
+function openDeleteStudentModal() {
+  const u = APP.current.user;
+  const body = `<p style="color:var(--red);font-weight:700;margin-bottom:14px">سيتم حذف الطالب <b>${UI.esc(u.full_name)}</b> نهائياً مع جميع حفظاته وصفحاته. هذا الإجراء لا يمكن التراجع عنه.</p>
+    ${fieldHtml('كلمة مرور حسابك للتأكيد', 'admin_password', '', 'password')}`;
+  const foot = `<button class="btn btn-danger" id="md-ok">حذف نهائياً</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('حذف الطالب', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    if (!f.admin_password) { UI.toast('أدخل كلمة المرور', 'err'); return; }
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'delete_student', user_id: u.user_id, admin_password: f.admin_password }),
+      { okMsg: 'تم حذف الطالب', modal: m, after: () => { location.hash = '#/students'; } });
+  };
+}
+
+function openAddSaveModal() {
+  const u = APP.current.user;
+  const activeSave = APP.current.saves.find(s => s.is_current && (s.status === 'ACTIVE' || s.status === 'SUSPENDED'));
+  const warn = activeSave ? `<p style="color:var(--gold);margin-bottom:14px">${icon('alert', 14)} يوجد حفظ نشط حالياً (${UI.esc(activeSave.name)})، سيتم إنهاؤه تلقائياً عند إضافة حفظ جديد.</p>` : '';
+  const body = `${warn}<div class="form-grid">
+    ${fieldHtml('اسم الحفظة', 'save_name', '')}
+    ${selectHtml('المشرف', 'teacher_id', u.teacher_id, teacherOptions())}
+    ${fieldHtml('من صفحة', 'start_page', '', 'number')}
+    ${fieldHtml('إلى صفحة', 'end_page', '', 'number')}
+    ${fieldHtml('الورد اليومي', 'every_day_page', '1', 'number')}
+  </div>`;
+  const foot = `<button class="btn btn-primary" id="md-ok">إضافة الحفظ</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('حفظ جديد', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    await runAction(ev.target, () => TW.call('testweb_mutate', {
+      action: 'add_save', user_id: u.user_id, replace_save_id: activeSave ? activeSave.id : null, fields: f,
+    }), { okMsg: 'تم إضافة الحفظ', modal: m, after: () => pageStudentDetail(u.user_id) });
+  };
+}
+
+function openEditSaveModal(saveId) {
+  const s = APP.current.saves.find(x => String(x.id) === String(saveId)); if (!s) return;
+  const tOpts = [['', '—']].concat(teacherOptions());
+  const body = `<div class="form-grid">
+    ${fieldHtml('إلى صفحة', 'end_page', s.end_page, 'number')}
+    ${selectHtml('الحالة', 'status', s.status, [['ACTIVE', 'نشط'], ['SUSPENDED', 'موقوف مؤقتاً']])}
+    ${selectHtml('المشرف', 'teacher_id', s.teacher_id, tOpts)}
+  </div>`;
+  const foot = `<button class="btn btn-primary" id="md-ok">حفظ</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('تعديل الحفظة', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'update_save', save_id: s.id, fields: f }),
+      { okMsg: 'تم حفظ بيانات الحفظة', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
+  };
+}
+
+function openExamControlModal(saveId, type) {
+  const s = APP.current.saves.find(x => String(x.id) === String(saveId)); if (!s) return;
+  const isE2 = type === 'EXAM2';
+  const enabled = isE2 ? s.exam2 : s.exam1;
+  const curTeacher = isE2 ? s.exam2_teacher_id : s.exam1_teacher_id;
+  const tOpts = [['', '— اختر مشرفاً —']].concat(teacherOptions());
+  const body = `<p class="muted" style="margin-bottom:14px">${isE2 ? 'الاختبار التراكمي (كامل الحفظ)' : 'الاختبار الجزئي'} للحفظة: <b>${UI.esc(s.name)}</b></p>
+    <div class="form-grid">
+      ${selectHtml('الحالة', 'enable', String(enabled), [['true', 'مُفعّل'], ['false', 'مُوقَف']])}
+      ${selectHtml('مشرف الاختبار', 'teacher_id', curTeacher || '', tOpts)}
+    </div>`;
+  const foot = `<button class="btn btn-primary" id="md-ok">حفظ</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal(isE2 ? 'التحكم بالاختبار التراكمي' : 'التحكم بالاختبار الجزئي', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    await runAction(ev.target, () => TW.call('testweb_mutate', {
+      action: 'exam_control', save_id: s.id, exam_type: type, enable: f.enable === 'true', teacher_id: f.teacher_id || null, notify: true,
+    }), { okMsg: 'تم تحديث إعدادات الاختبار', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
+  };
+}
+
+function openGradeModal(table, rowId, isExam) {
+  const body = `<p class="muted" style="margin-bottom:14px">اختر نتيجة التقييم، وسيُرسل إشعار للطالب ومشرفه تلقائياً.</p>
+    <div class="form-grid">${fieldHtml('التسويد (0-999)', 'sowad', 0, 'number')}${fieldHtml('النسيان (0-999)', 'nisyan', 0, 'number')}${isExam ? fieldHtml('الفتح (0-999)', 'fateh', 0, 'number') : ''}</div>
+    ${textareaHtml('ملاحظة (اختياري)', 'custom_info_text', '', 'ملاحظة تظهر للطالب...')}
     <div class="field"><label><input type="checkbox" id="g-notify" checked style="width:auto;margin-left:6px">إرسال إشعار واتساب للطالب والمشرف</label></div>
-    <div id="g-preview" class="mini-row"><span>التقدير المتوقّع</span><span id="g-pv">—</span></div>`;
-  const foot=`<button class="btn btn-primary" id="md-save">حفظ التقييم</button><button class="btn btn-ghost" onclick="closeTopModal()">إلغاء</button>`;
-  const m=UI.modal(isExam?'تقييم اختبار':'تقييم حفظ اليوم',body,foot);
-  const calc=()=>{
-    const g=collect(m.el); const so=+g.sowad||0,ni=+g.nisyan||0,fa=+g.fateh||0;
-    let ps; if(isExam){const s=so+ni+fa*2; ps=s>=6?'reject':s>=3?'good':s>=1?'very_good':'perfect';}
-    else{const s=so+ni; ps=s>=3?'reject':s===2?'good':s===1?'very_good':'perfect';}
-    const lbl={reject:'رسوب',good:'جيد جداً',very_good:'إمتياز',perfect:'مُتقِن'}[ps];
-    m.el.querySelector('#g-pv').innerHTML=UI.badge(ps,lbl);
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span class="muted">التقدير المتوقّع:</span><span id="g-pv">—</span></div>`;
+  const foot = `<button class="btn btn-primary" id="md-ok">حفظ التقييم</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal(isExam ? 'تقييم اختبار' : 'تقييم حفظ اليوم', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  const calc = () => {
+    const g = collectFields(m.el); const so = +g.sowad || 0, ni = +g.nisyan || 0, fa = +g.fateh || 0;
+    let ps; if (isExam) { const sum = so + ni + fa * 2; ps = sum >= 6 ? 'reject' : sum >= 3 ? 'good' : sum >= 1 ? 'very_good' : 'perfect'; }
+    else { const sum = so + ni; ps = sum >= 3 ? 'reject' : sum === 2 ? 'good' : sum === 1 ? 'very_good' : 'perfect'; }
+    const lbl = { reject: 'رسوب', good: 'جيد جداً', very_good: 'إمتياز', perfect: 'مُتقِن' }[ps];
+    m.el.querySelector('#g-pv').innerHTML = UI.gradeBadge(ps, lbl);
   };
-  m.el.querySelectorAll('.f').forEach(i=>i.addEventListener('input',calc)); calc();
-  m.el.querySelector('#md-save').onclick=async(ev)=>{
-    const g=collect(m.el);
-    const payload={action:'grade_page',table,row_id:rowId,sowad:+g.sowad||0,nisyan:+g.nisyan||0,fateh:+g.fateh||0,
-      custom_info_text:g.custom_info_text||'',notify:m.el.querySelector('#g-notify').checked};
-    await doMutate(ev.target,payload,m,'تم حفظ التقييم وإرسال الإشعار',true);
-  };
-}
-
-function openExam(saveId,type){
-  const s=APP.current.data.saves.find(x=>String(x.id)===String(saveId)); if(!s) return;
-  const isE2=type==='EXAM2';
-  const enabled=isE2?s.exam2:s.exam1;
-  const curTeacher=isE2?s.exam2_teacher_id:s.exam1_teacher_id;
-  const tOpts=[['','— اختر مشرفاً —']].concat(APP.data.teachers.map(t=>[t.teacher_id,t.full_name]));
-  const body=`
-    <p class="muted mb">${isE2?'الاختبار التراكمي (كامل الحفظ)':'الاختبار الجزئي'} للحفظة: <b>${UI.esc(s.name)}</b></p>
-    ${selField('الحالة','enable',String(enabled),[['true','مُفعّل'],['false','مُوقَف']])}
-    ${selField('مشرف الاختبار','teacher_id',curTeacher||'',tOpts)}
-    <div class="field"><label><input type="checkbox" id="e-notify" checked style="width:auto;margin-left:6px">إشعار الطالب والمشرف عند التفعيل</label></div>`;
-  const foot=`<button class="btn btn-primary" id="md-save">حفظ</button><button class="btn btn-ghost" onclick="closeTopModal()">إلغاء</button>`;
-  const m=UI.modal(isE2?'التحكم بالاختبار التراكمي':'التحكم بالاختبار الجزئي',body,foot);
-  m.el.querySelector('#md-save').onclick=async(ev)=>{
-    const f=collect(m.el);
-    const payload={action:'exam_control',save_id:s.id,exam_type:type,enable:f.enable==='true',
-      teacher_id:f.teacher_id||null,notify:m.el.querySelector('#e-notify').checked};
-    await doMutate(ev.target,payload,m,'تم تحديث إعدادات الاختبار',true);
+  m.el.querySelectorAll('.f-input').forEach(i => i.addEventListener('input', calc)); calc();
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const g = collectFields(m.el);
+    const payload = {
+      action: 'grade_page', table, row_id: rowId, state: 'finished',
+      sowad: +g.sowad || 0, nisyan: +g.nisyan || 0, fateh: +g.fateh || 0,
+      custom_info_text: g.custom_info_text || '', notify: m.el.querySelector('#g-notify').checked,
+    };
+    await runAction(ev.target, () => TW.call('testweb_mutate', payload),
+      { okMsg: 'تم حفظ التقييم وإرسال الإشعار', modal: m, refreshDash: false, after: () => pageStudentDetail(APP.current.user.user_id) });
   };
 }
 
-function openSetPassword(kind,id,name){
-  const body=`<p class="muted mb">تعيين كلمة مرور جديدة لـ <b>${UI.esc(name)}</b>. ستُحدَّث في نظام الدخول مباشرة.</p>
-    ${field('كلمة المرور الجديدة','password','')}
-    <button class="btn btn-ghost btn-sm" onclick="genPw(this)">🎲 توليد كلمة قوية</button>`;
-  const foot=`<button class="btn btn-primary" id="md-save">تعيين</button><button class="btn btn-ghost" onclick="closeTopModal()">إلغاء</button>`;
-  const m=UI.modal('تغيير كلمة المرور',body,foot);
-  m.el.querySelector('#md-save').onclick=async(ev)=>{
-    const f=collect(m.el);
-    if(!f.password || f.password.length<4){ UI.toast('كلمة المرور قصيرة جداً','err'); return; }
-    await doMutate(ev.target,{action:'set_password',kind,id,password:f.password},m,'تم تغيير كلمة المرور');
+function openQuickMessageModal(phone, name) {
+  const body = `<p class="muted" style="margin-bottom:14px">إرسال رسالة واتساب إلى <b>${UI.esc(name)}</b> (<span dir="ltr">${UI.esc(phone)}</span>).</p>${textareaHtml('نص الرسالة', 'msg', '', 'اكتب رسالتك هنا...')}`;
+  const foot = `<button class="btn btn-primary" id="md-ok">إرسال</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('رسالة مباشرة', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const msg = collectFields(m.el).msg;
+    if (!msg.trim()) { UI.toast('اكتب نص الرسالة', 'err'); return; }
+    await runAction(ev.target, () => TW.call('testweb_message', { target: 'phone', phone, msg }),
+      { okMsg: 'تم إرسال الرسالة', modal: m, refreshDash: false });
   };
 }
-function genPw(btn){
-  const chars='abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let p=''; for(let i=0;i<10;i++)p+=chars[Math.floor(Math.random()*chars.length)];
-  btn.parentElement.querySelector('.f').value=p; UI.toast('تم توليد كلمة مرور','info',1200);
+
+/* ================= المشرفون ================= */
+const tFilters = { q: '', sort: 'students' };
+function pageTeachers() {
+  view().innerHTML = `
+    <div class="panel">
+      <div class="toolbar">
+        <div class="search-box">${icon('search', 16)}<input id="t-q" placeholder="ابحث باسم المشرف أو الهاتف" value="${UI.esc(tFilters.q)}"></div>
+        <select class="f-input" id="t-sort" style="width:auto">
+          <option value="students">ترتيب: عدد الطلاب</option><option value="name">الاسم</option><option value="absence">الأكثر غياباً</option>
+        </select>
+        <a class="btn btn-primary" href="#/add-teacher">${icon('plus', 15)} إضافة مشرف</a>
+      </div>
+    </div>
+    <div id="t-list"></div>`;
+  $('#t-sort').value = tFilters.sort;
+  $('#t-q').addEventListener('input', e => { tFilters.q = e.target.value; renderTeacherList(); });
+  $('#t-sort').addEventListener('change', e => { tFilters.sort = e.target.value; renderTeacherList(); });
+  renderTeacherList();
+}
+function renderTeacherList() {
+  let list = [...APP.dash.teachers];
+  const q = tFilters.q.trim().toLowerCase();
+  if (q) list = list.filter(t => (t.full_name || '').toLowerCase().includes(q) || (t.phone || '').includes(q));
+  const sorters = {
+    students: (a, b) => b.students_count - a.students_count,
+    name: (a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'ar'),
+    absence: (a, b) => b.absence_total - a.absence_total,
+  };
+  list.sort(sorters[tFilters.sort] || sorters.students);
+  const wrap = $('#t-list');
+  if (!list.length) { wrap.innerHTML = UI.empty('لا مشرفين مطابقين', 'search'); return; }
+  wrap.innerHTML = `<div class="panel"><div style="display:grid;gap:10px">${list.map(teacherRow).join('')}</div></div>`;
+}
+function teacherRow(t) {
+  return `<div class="entity-card" onclick="location.hash='#/teachers/${UI.attr(t.teacher_id)}'">
+    <div class="avatar">${icon('teacher', 20)}</div>
+    <div class="entity-info">
+      <div class="name">${UI.esc(t.full_name || '—')} <span style="color:var(--muted);font-weight:400">— ${UI.esc(t.gender_label)}</span></div>
+      <div class="sub" dir="ltr">${UI.esc(t.phone || '—')}</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+      ${UI.badge('blue', t.students_count + ' طالب')}
+      ${t.joined ? UI.badge('green', 'منضمّ') : UI.badge('gold', 'لم ينضمّ')}
+      ${t.absence_total > 0 ? UI.badge('gray', 'غياب ' + t.absence_total) : ''}
+    </div>
+  </div>`;
 }
 
-async function doMutate(btn,payload,modal,okMsg,reloadStudent){
-  const orig=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
-  try{
-    await TW.call('testweb_mutate',payload);
-    UI.toast(okMsg,'ok'); modal.close();
-    // تحديث الكاش العام بهدوء ثم إعادة عرض الصفحة الحالية
-    await loadDataSilent();
-    if(reloadStudent && APP.current?.type==='student'){ pageStudentDetail(APP.current.data.user.user_id); }
-    else if(APP.current?.type==='student'){ pageStudentDetail(APP.current.data.user.user_id); }
-  }catch(e){ UI.toast(e.message,'err',4500); btn.disabled=false; btn.innerHTML=orig; }
+async function pageTeacherDetail(id) {
+  view().innerHTML = `<div class="empty-state"><span class="spinner lg"></span></div>`;
+  let res;
+  try { res = await TW.call('testweb_teacher', { teacher_id: id }); }
+  catch (e) { view().innerHTML = UI.errorBox(e.message); return; }
+  const t = res.teacher;
+  const avatar = t.photo_url
+    ? `<div class="avatar" style="width:78px;height:78px"><img src="${UI.esc(t.photo_url)}"></div>`
+    : `<div class="avatar" style="width:78px;height:78px">${icon('teacher', 30)}</div>`;
+  const info = kvGrid([
+    ['رقم الهاتف', UI.copyField(t.phone)],
+    ['كلمة المرور', UI.pwField(t.password)],
+    ['الجنس', UI.esc(t.gender_label)],
+    ['تاريخ الميلاد', UI.esc(t.date_of_brith)],
+    ['العنوان', UI.esc(t.location)],
+    ['الموقع (GPS)', UI.copyField(t.gps)],
+    ['عدد الغيابات', String(t.absence_total)],
+    ['انضمّ في', UI.fmtDate(t.joined_in)],
+    ['تاريخ الإنشاء', UI.fmtDate(t.created_at)],
+    ['معرّف المشرف', UI.copyField(t.teacher_id)],
+  ]);
+  const stuRow = s => `<div class="entity-card" onclick="location.hash='#/students/${UI.attr(s.user_id)}'">
+    <div class="avatar">${icon('students', 18)}</div>
+    <div class="entity-info"><div class="name">${UI.esc(s.full_name)}</div><div class="sub">${UI.esc(s.save_name)} • ${UI.esc(s.save_status)}</div></div>
+  </div>`;
+  const my = res.my_students.length ? res.my_students.map(stuRow).join('') : UI.empty('لا طلاب', 'students');
+  const ex = res.exam_students.length ? res.exam_students.map(s => `<div class="entity-card" onclick="location.hash='#/students/${UI.attr(s.user_id)}'">
+    <div class="avatar">${icon('exam', 18)}</div>
+    <div class="entity-info"><div class="name">${UI.esc(s.full_name)}</div><div class="sub">${UI.esc(s.exam_kind)} • ${UI.esc(s.save_name)}</div></div>
+  </div>`).join('') : UI.empty('لا تكليفات اختبار', 'exam');
+
+  view().innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="history.back()" style="margin-bottom:14px">→ رجوع</button>
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:16px">
+          ${avatar}
+          <div><div style="font-size:22px;font-weight:800">${UI.esc(t.full_name || '—')}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${t.joined ? UI.badge('green', 'منضمّ') : UI.badge('gold', 'لم ينضمّ')}${UI.badge('blue', res.counts.my + ' طالب')}</div></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-start">
+          <button class="btn btn-ghost btn-sm" onclick="openSetPasswordModal('teacher','${UI.attr(t.teacher_id)}','${UI.attr(t.full_name)}')">${icon('key', 14)} كلمة المرور</button>
+          <button class="btn btn-primary btn-sm" onclick="openQuickMessageModal('${UI.attr(t.phone)}','${UI.attr(t.full_name)}')">${icon('message', 14)} رسالة</button>
+        </div>
+      </div>
+      ${info}
+    </div>
+    <div class="panel"><div class="panel-head"><h2>طلابه (${res.counts.my})</h2></div><div style="display:grid;gap:8px">${my}</div></div>
+    <div class="panel"><div class="panel-head"><h2>تكليفات الاختبار (${res.counts.exam})</h2></div><div style="display:grid;gap:8px">${ex}</div></div>`;
 }
-async function loadDataSilent(){ try{ APP.data=await TW.call('testweb_dashboard'); }catch{} }
-function closeTopModal(){ const all=document.querySelectorAll('.modal-bg'); if(all.length) all[all.length-1].querySelector('.modal-x').click(); }
 
 /* ================= الرسائل ================= */
-function pageMessages(){
-  view().innerHTML=`
-    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">
-      ${msgCard('📢','رسالة لكل الطلاب', 'إرسال رسالة واتساب لجميع الطلاب المسجّلين.',"openBroadcast('all_students')")}
-      ${msgCard('📣','رسالة لكل المشرفين','إرسال رسالة واتساب لجميع المشرفين.',"openBroadcast('all_teachers')")}
-      ${msgCard('☑','تحديد طلاب','اختيار عدد من الطلاب وإرسال رسالة لهم.',"openPick('students')")}
-      ${msgCard('☑','تحديد مشرفين','اختيار عدد من المشرفين وإرسال رسالة لهم.',"openPick('teachers')")}
-      ${msgCard('📱','رسالة لرقم هاتف','إرسال لرقم ٠٧٧... (يُحوَّل تلقائياً إلى صيغة واتساب).',"openPhoneMsg()")}
-    </div>`;
+function pageMessages() {
+  const card = (ic, title, desc, onclick) => `<div class="entity-card" style="align-items:flex-start" onclick="${onclick}">
+    <div class="avatar">${icon(ic, 20)}</div>
+    <div class="entity-info"><div class="name">${UI.esc(title)}</div><div class="sub">${UI.esc(desc)}</div></div>
+  </div>`;
+  view().innerHTML = `<div class="cards-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
+    ${card('message', 'رسالة لكل الطلاب', 'إرسال رسالة واتساب لجميع الطلاب المسجّلين.', "openBroadcastModal('all_students')")}
+    ${card('message', 'رسالة لكل المشرفين', 'إرسال رسالة واتساب لجميع المشرفين.', "openBroadcastModal('all_teachers')")}
+    ${card('students', 'تحديد طلاب', 'اختيار عدد من الطلاب وإرسال رسالة لهم.', "openPickModal('students')")}
+    ${card('teacher', 'تحديد مشرفين', 'اختيار عدد من المشرفين وإرسال رسالة لهم.', "openPickModal('teachers')")}
+    ${card('phone', 'رسالة لرقم هاتف', 'إرسال لرقم ٠٧٧... (يُحوَّل تلقائياً إلى صيغة واتساب).', 'openPhoneMsgModal()')}
+  </div>`;
 }
-function msgCard(ic,title,desc,onclick){
-  return `<div class="pcard" onclick="${onclick}">
-    <div class="flex center gap"><div class="avatar" style="width:46px;height:46px;font-size:20px">${ic}</div>
-    <div class="pcard-id"><div class="nm">${title}</div></div></div>
-    <div class="muted" style="font-size:13px">${desc}</div></div>`;
-}
-function msgComposer(){ return `<div class="field"><label>نص الرسالة</label><textarea class="f" data-k="msg" placeholder="اكتب رسالتك هنا..."></textarea></div>`; }
+function msgComposerHtml() { return textareaHtml('نص الرسالة', 'msg', '', 'اكتب رسالتك هنا...'); }
 
-function openBroadcast(target){
-  const count = target==='all_students'?APP.data.stats.students_total:APP.data.stats.teachers_total;
-  const who = target==='all_students'?'جميع الطلاب':'جميع المشرفين';
-  const body=`<p class="muted mb">سترسل إلى <b>${who}</b> (${count} مستلم).</p>${msgComposer()}`;
-  const foot=`<button class="btn btn-primary" id="md-send">إرسال للجميع</button><button class="btn btn-ghost" onclick="closeTopModal()">إلغاء</button>`;
-  const m=UI.modal('رسالة جماعية',body,foot);
-  m.el.querySelector('#md-send').onclick=ev=>sendMsg(ev.target,{target,msg:collect(m.el).msg},m);
-}
-function openPhoneMsg(){
-  const body=`${field('رقم الهاتف','phone','','tel')}${msgComposer()}`;
-  const foot=`<button class="btn btn-primary" id="md-send">إرسال</button><button class="btn btn-ghost" onclick="closeTopModal()">إلغاء</button>`;
-  const m=UI.modal('رسالة إلى رقم',body,foot);
-  m.el.querySelector('#md-send').onclick=ev=>{const f=collect(m.el);sendMsg(ev.target,{target:'phone',phone:f.phone,msg:f.msg},m);};
-}
-function openSendOne(phone,name){
-  const body=`<p class="muted mb">إرسال رسالة إلى <b>${UI.esc(name)}</b> (<span dir="ltr">${UI.esc(phone)}</span>).</p>${msgComposer()}`;
-  const foot=`<button class="btn btn-primary" id="md-send">إرسال</button><button class="btn btn-ghost" onclick="closeTopModal()">إلغاء</button>`;
-  const m=UI.modal('رسالة مباشرة',body,foot);
-  m.el.querySelector('#md-send').onclick=ev=>sendMsg(ev.target,{target:'phone',phone,msg:collect(m.el).msg},m);
-}
-function openPick(kind){
-  const items = kind==='students'?APP.data.students.map(s=>({id:s.user_id,nm:s.full_name,mt:s.phone})):
-    APP.data.teachers.map(t=>({id:t.teacher_id,nm:t.full_name,mt:t.phone}));
-  const list=items.map(i=>`<label class="pick"><input type="checkbox" value="${UI.attr(i.id)}">
-    <div><div class="nm">${UI.esc(i.nm)}</div><div class="mt" dir="ltr">${UI.esc(i.mt)}</div></div></label>`).join('');
-  const body=`<div class="field"><input class="input" placeholder="بحث..." style="width:100%" oninput="filterPick(this)"></div>
-    <div class="flex between mb"><button class="btn btn-ghost btn-sm" onclick="pickAll(this,true)">تحديد الكل</button>
-    <span class="muted" id="pick-n">0 محدد</span><button class="btn btn-ghost btn-sm" onclick="pickAll(this,false)">إلغاء التحديد</button></div>
-    <div class="pick-list" id="pick-list">${list}</div>${msgComposer()}`;
-  const foot=`<button class="btn btn-primary" id="md-send">إرسال للمحدّدين</button><button class="btn btn-ghost" onclick="closeTopModal()">إلغاء</button>`;
-  const m=UI.modal(kind==='students'?'تحديد طلاب':'تحديد مشرفين',body,foot,{wide:true});
-  const upd=()=>{const n=m.el.querySelectorAll('#pick-list input:checked').length;m.el.querySelector('#pick-n').textContent=n+' محدد';};
-  m.el.querySelectorAll('#pick-list input').forEach(c=>c.addEventListener('change',upd));
-  m.el.querySelector('#md-send').onclick=ev=>{
-    const ids=[...m.el.querySelectorAll('#pick-list input:checked')].map(c=>c.value);
-    if(!ids.length){UI.toast('لم تحدّد أحداً','err');return;}
-    sendMsg(ev.target,{target:kind,ids,msg:collect(m.el).msg},m);
+function openBroadcastModal(target) {
+  const count = target === 'all_students' ? APP.dash.stats.students_total : APP.dash.stats.teachers_total;
+  const who = target === 'all_students' ? 'جميع الطلاب' : 'جميع المشرفين';
+  const fatherChk = target === 'all_students' ? `<div class="field"><label><input type="checkbox" id="bc-father" style="width:auto;margin-left:6px">إرسال أيضاً لأولياء الأمور</label></div>` : '';
+  const body = `<p class="muted" style="margin-bottom:14px">سترسل إلى <b>${who}</b> (${count} مستلم).</p>${msgComposerHtml()}${fatherChk}`;
+  const foot = `<button class="btn btn-primary" id="md-ok">إرسال للجميع</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('رسالة جماعية', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = ev => {
+    const msg = collectFields(m.el).msg;
+    if (!msg.trim()) { UI.toast('اكتب نص الرسالة', 'err'); return; }
+    const alsoFather = m.el.querySelector('#bc-father')?.checked === true;
+    sendBulkMsg(ev.target, { target, msg, also_father: alsoFather }, m);
   };
 }
-function filterPick(inp){
-  const q=inp.value.toLowerCase();
-  inp.closest('.modal-body').querySelectorAll('#pick-list .pick').forEach(p=>{
-    p.style.display=p.querySelector('.nm').textContent.toLowerCase().includes(q)||p.querySelector('.mt').textContent.includes(q)?'':'none';
-  });
+function openPhoneMsgModal() {
+  const body = `${fieldHtml('رقم الهاتف', 'phone', '', 'tel')}${msgComposerHtml()}`;
+  const foot = `<button class="btn btn-primary" id="md-ok">إرسال</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('رسالة إلى رقم', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = ev => {
+    const f = collectFields(m.el);
+    if (!f.phone || !f.msg.trim()) { UI.toast('أدخل الهاتف ونص الرسالة', 'err'); return; }
+    sendBulkMsg(ev.target, { target: 'phone', phone: f.phone, msg: f.msg }, m);
+  };
 }
-function pickAll(btn,val){ btn.closest('.modal-body').querySelectorAll('#pick-list input').forEach(c=>{if(c.closest('.pick').style.display!=='none')c.checked=val;});
-  const m=btn.closest('.modal-body');const n=m.querySelectorAll('#pick-list input:checked').length;m.querySelector('#pick-n').textContent=n+' محدد';}
-
-async function sendMsg(btn,payload,modal){
-  if(!payload.msg||!payload.msg.trim()){ UI.toast('اكتب نص الرسالة','err'); return; }
-  if(payload.target==='phone' && !payload.phone){ UI.toast('أدخل رقم الهاتف','err'); return; }
-  const orig=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="spinner"></span> جارٍ الإرسال';
-  try{
-    const r=await TW.call('testweb_message',payload);
-    modal.close();
-    UI.toast(`تم الإرسال: ${r.sent} ناجحة${r.failed?` • ${r.failed} فاشلة`:''} من ${r.total}`, r.failed?'info':'ok',4500);
-  }catch(e){ UI.toast(e.message,'err',4500); btn.disabled=false; btn.innerHTML=orig; }
+function openPickModal(kind) {
+  const items = kind === 'students'
+    ? APP.dash.students.map(s => ({ id: s.user_id, nm: s.full_name, mt: s.phone }))
+    : APP.dash.teachers.map(t => ({ id: t.teacher_id, nm: t.full_name, mt: t.phone }));
+  const list = items.map(i => `<label style="display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid var(--border)">
+    <input type="checkbox" class="pick-chk" value="${UI.attr(i.id)}" style="width:auto">
+    <span><b>${UI.esc(i.nm)}</b><br><span class="muted" dir="ltr" style="font-size:12px">${UI.esc(i.mt)}</span></span>
+  </label>`).join('');
+  const body = `<div class="search-box" style="margin-bottom:10px;width:100%">${icon('search', 16)}<input id="pick-q" placeholder="بحث..."></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+      <button class="btn btn-ghost btn-sm" id="pick-all">تحديد الكل</button>
+      <span class="muted" id="pick-n">0 محدد</span>
+      <button class="btn btn-ghost btn-sm" id="pick-none">إلغاء التحديد</button>
+    </div>
+    <div id="pick-list" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)">${list}</div>
+    <div style="margin-top:14px">${msgComposerHtml()}</div>`;
+  const foot = `<button class="btn btn-primary" id="md-ok">إرسال للمحدّدين</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal(kind === 'students' ? 'تحديد طلاب' : 'تحديد مشرفين', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  const upd = () => { m.el.querySelector('#pick-n').textContent = m.el.querySelectorAll('.pick-chk:checked').length + ' محدد'; };
+  m.el.querySelectorAll('.pick-chk').forEach(c => c.addEventListener('change', upd));
+  m.el.querySelector('#pick-all').onclick = () => { m.el.querySelectorAll('.pick-chk').forEach(c => { if (c.closest('label').style.display !== 'none') c.checked = true; }); upd(); };
+  m.el.querySelector('#pick-none').onclick = () => { m.el.querySelectorAll('.pick-chk').forEach(c => c.checked = false); upd(); };
+  m.el.querySelector('#pick-q').addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    m.el.querySelectorAll('#pick-list label').forEach(l => { l.style.display = l.textContent.toLowerCase().includes(q) ? '' : 'none'; });
+  });
+  m.el.querySelector('#md-ok').onclick = ev => {
+    const ids = [...m.el.querySelectorAll('.pick-chk:checked')].map(c => c.value);
+    if (!ids.length) { UI.toast('لم تحدّد أحداً', 'err'); return; }
+    const msg = collectFields(m.el).msg;
+    if (!msg.trim()) { UI.toast('اكتب نص الرسالة', 'err'); return; }
+    sendBulkMsg(ev.target, { target: kind, ids, msg }, m);
+  };
+}
+async function sendBulkMsg(btn, payload, modal) {
+  await runAction(btn, () => TW.call('testweb_message', payload), {
+    modal, refreshDash: false,
+    after: r => UI.toast(`تم الإرسال: ${r.sent} ناجحة${r.failed ? ` • ${r.failed} فاشلة` : ''} من ${r.total}`, r.failed ? 'info' : 'ok', 4500),
+  });
 }
 
 /* ================= رموز الدخول (OTP) ================= */
-let otpTimer=null;
-async function pageOtps(){
-  if(otpTimer){clearInterval(otpTimer);otpTimer=null;}
-  view().innerHTML=`<div class="section-head" style="margin-top:0"><h2>آخر رموز الدخول المُرسَلة</h2>
-    <button class="btn btn-ghost btn-sm" onclick="pageOtps()">↻ تحديث</button></div>
-    <p class="muted mb">يُفكّ تشفير الرمز الأصلي تلقائياً. صلاحية كل رمز دقيقتان من وقت الإرسال.</p>
-    <div id="otp-wrap">${UI.skeletonCards(4)}</div>`;
+let otpTimer = null;
+async function pageOtps() {
+  if (otpTimer) { clearInterval(otpTimer); otpTimer = null; }
+  view().innerHTML = `<div class="panel">
+    <div class="panel-head"><h2>آخر رموز الدخول المُرسَلة</h2><button class="btn btn-ghost btn-sm" onclick="pageOtps()">${icon('refresh', 14)} تحديث</button></div>
+    <p class="muted" style="margin-bottom:14px">يُفكّ تشفير الرمز الأصلي تلقائياً. صلاحية كل رمز دقيقتان من وقت الإرسال.</p>
+    <div id="otp-wrap"><span class="spinner"></span></div>
+  </div>`;
   let res;
-  try{ res=await TW.call('testweb_otps',{limit:40}); }
-  catch(e){ $('#otp-wrap').innerHTML=UI.errorBox(e.message); return; }
+  try { res = await TW.call('testweb_otps', { limit: 40 }); }
+  catch (e) { $('#otp-wrap').innerHTML = UI.errorBox(e.message); return; }
   renderOtps(res.otps);
-  // عدّاد تنازلي حيّ
-  otpTimer=setInterval(()=>{ document.querySelectorAll('[data-exp]').forEach(el=>{
-    let s=+el.getAttribute('data-exp'); s=Math.max(0,s-1); el.setAttribute('data-exp',s);
-    el.innerHTML = s>0 ? `<span class="badge ok">${fmtCountdown(s)}</span>` : `<span class="badge no">منتهٍ</span>`;
-  }); },1000);
+  otpTimer = setInterval(() => {
+    document.querySelectorAll('[data-exp]').forEach(el => {
+      let s = +el.getAttribute('data-exp'); s = Math.max(0, s - 1); el.setAttribute('data-exp', s);
+      el.innerHTML = s > 0 ? UI.badge('green', fmtCountdown(s)) : UI.badge('red', 'منتهٍ');
+    });
+  }, 1000);
 }
-function fmtCountdown(s){ const m=Math.floor(s/60); return `${m}:${String(s%60).padStart(2,'0')}`; }
-function renderOtps(otps){
-  const wrap=$('#otp-wrap'); if(!wrap)return;
-  if(!otps.length){wrap.innerHTML=UI.empty('لا رموز حديثة','🔑');return;}
-  const rows=otps.map(o=>{
-    const code=o.code?`<span class="copy-field"><span class="val" style="font-size:16px;font-weight:800;letter-spacing:2px">${UI.esc(o.code)}</span><button class="cp" onclick="UI.copy('${UI.attr(o.code)}')">⧉</button></span>`:'<span class="muted">تعذّر فكّه</span>';
-    const status=o.verified?UI.badge('ok','تم التحقق'):o.logined?UI.badge('ok','سجّل الدخول'):o.expired?UI.badge('no','منتهٍ'):UI.badge('warn','بانتظار');
-    const exp=o.expired?`<span class="badge no">منتهٍ</span>`:`<span data-exp="${o.expires_in_sec}"><span class="badge ok">${fmtCountdown(o.expires_in_sec)}</span></span>`;
+function fmtCountdown(s) { const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; }
+function renderOtps(otps) {
+  const wrap = $('#otp-wrap'); if (!wrap) return;
+  if (!otps.length) { wrap.innerHTML = UI.empty('لا رموز حديثة', 'key'); return; }
+  const rows = otps.map(o => {
+    const code = o.code ? `<span class="copy-row"><b style="letter-spacing:2px">${UI.esc(o.code)}</b><button class="icon-btn" style="width:26px;height:26px" onclick="UI.copy('${UI.attr(o.code)}')">${icon('copy', 13)}</button></span>` : '<span class="muted">تعذّر فكّه</span>';
+    const status = o.verified ? UI.badge('green', 'تم التحقق') : o.logined ? UI.badge('green', 'سجّل الدخول') : o.expired ? UI.badge('red', 'منتهٍ') : UI.badge('gold', 'بانتظار');
+    const exp = o.expired ? UI.badge('red', 'منتهٍ') : `<span data-exp="${o.expires_in_sec}">${UI.badge('green', fmtCountdown(o.expires_in_sec))}</span>`;
     return `<tr>
-      <td>${code}</td>
-      <td><b>${UI.esc(o.student_name)}</b></td>
-      <td>${UI.copyField(o.phone)}</td>
-      <td>${status}</td>
-      <td>${exp}</td>
-      <td class="muted">${UI.ago(o.otp_date)}</td>
-      <td class="muted">محاولات: ${o.allow_trying}</td>
+      <td>${code}</td><td><b>${UI.esc(o.student_name)}</b></td><td>${UI.copyField(o.phone)}</td>
+      <td>${status}</td><td>${exp}</td><td class="muted">${UI.fmtDate(o.otp_date)}</td><td class="muted">محاولات: ${o.allow_trying}</td>
     </tr>`;
   }).join('');
-  wrap.innerHTML=`<div class="tbl-wrap"><table class="tbl">
+  wrap.innerHTML = `<div class="tbl-wrap"><table>
     <thead><tr><th>الرمز</th><th>الطالب</th><th>الهاتف</th><th>الحالة</th><th>ينتهي خلال</th><th>منذ</th><th>المحاولات</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
+
+/* ================= العطلات ================= */
+async function pageHolidays() {
+  const isOwner = APP.admin.type === 'owner';
+  view().innerHTML = `<div class="panel">
+    <div class="panel-head"><h2>العطلات</h2>${isOwner ? `<button class="btn btn-primary btn-sm" onclick="openAddHolidayModal()">${icon('plus', 14)} إضافة عطلة</button>` : ''}</div>
+    <div id="hol-wrap"><span class="spinner"></span></div>
+  </div>`;
+  let res;
+  try { res = await TW.call('testweb_holidays', { action: 'list' }); }
+  catch (e) { $('#hol-wrap').innerHTML = UI.errorBox(e.message); return; }
+  const wrap = $('#hol-wrap');
+  if (!res.holidays.length) { wrap.innerHTML = UI.empty('لا عطلات مسجّلة', 'holiday'); return; }
+  const typeLabel = { ALL: 'الجميع', FOR_USER: 'طالب', FOR_TEACHER: 'مشرف' };
+  const rows = res.holidays.map(h => `<tr>
+    <td><b>${UI.esc(h.target_name)}</b></td>
+    <td>${UI.badge('blue', typeLabel[h.type] || h.type)}</td>
+    <td>${UI.esc(h.for_date)}</td>
+    <td>${h.processed ? UI.badge('green', 'مُنفّذة') : UI.badge('gold', 'قادمة')}</td>
+    <td class="muted">${UI.fmtDateShort(h.created_at)}</td>
+    <td>${isOwner ? `<button class="icon-btn" onclick="deleteHoliday('${h.id}')">${icon('trash', 14)}</button>` : ''}</td>
+  </tr>`).join('');
+  wrap.innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>الهدف</th><th>النوع</th><th>التاريخ</th><th>الحالة</th><th>أُضيفت</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+async function deleteHoliday(id) {
+  if (!await UI.confirm('حذف عطلة', 'هل تريد حذف هذه العطلة؟', 'حذف')) return;
+  try { await TW.call('testweb_holidays', { action: 'delete', id }); UI.toast('تم حذف العطلة', 'ok'); pageHolidays(); }
+  catch (e) { UI.toast(e.message, 'err'); }
+}
+function openAddHolidayModal() {
+  const body = `<div class="form-grid">
+    ${selectHtml('النوع', 'type', 'ALL', [['ALL', 'الجميع'], ['FOR_USER', 'طالب محدّد'], ['FOR_TEACHER', 'مشرف محدّد']])}
+    ${fieldHtml('التاريخ', 'for_date', baghdadDateStr(), 'date')}
+  </div>
+  <div id="hol-target" style="margin-top:10px"></div>`;
+  const foot = `<button class="btn btn-primary" id="md-ok">إضافة</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('إضافة عطلة', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  const typeSel = m.el.querySelector('[data-k="type"]');
+  const renderTarget = () => {
+    const t = typeSel.value;
+    const tgt = m.el.querySelector('#hol-target');
+    if (t === 'FOR_USER') tgt.innerHTML = selectHtml('الطالب', 'for_user_id', '', APP.dash.students.map(s => [s.user_id, s.full_name]));
+    else if (t === 'FOR_TEACHER') tgt.innerHTML = selectHtml('المشرف', 'for_teacher_id', '', teacherOptions());
+    else tgt.innerHTML = '';
+  };
+  typeSel.addEventListener('change', renderTarget); renderTarget();
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    await runAction(ev.target, () => TW.call('testweb_holidays', {
+      action: 'add', type: f.type, for_date: f.for_date, for_user_id: f.for_user_id || null, for_teacher_id: f.for_teacher_id || null,
+    }), { okMsg: 'تم إضافة العطلة', modal: m, refreshDash: false, after: () => pageHolidays() });
+  };
+}
+function baghdadDateStr(offsetDays = 0) {
+  const now = new Date(Date.now() + 3 * 3600 * 1000 + offsetDays * 86400 * 1000);
+  return now.toISOString().slice(0, 10);
+}
+
+/* ================= سجل العمليات ================= */
+async function pageLogs() {
+  view().innerHTML = `<div class="panel"><div class="panel-head"><h2>سجل العمليات الإدارية</h2></div><div id="logs-wrap"><span class="spinner"></span></div></div>`;
+  let res;
+  try { res = await TW.call('testweb_logs', { limit: 300 }); }
+  catch (e) { $('#logs-wrap').innerHTML = UI.errorBox(e.message); return; }
+  const wrap = $('#logs-wrap');
+  if (!res.logs.length) { wrap.innerHTML = UI.empty('لا سجلّات', 'logs'); return; }
+  const rows = res.logs.map(l => `<tr>
+    <td class="muted" style="white-space:nowrap">${UI.fmtDate(l.created_at)}</td>
+    <td>${UI.badge(l.actor_role === 'مشرف' ? 'teal' : l.actor_role === 'مسؤول إداري' ? 'purple' : 'blue', l.actor_role)}</td>
+    <td><b>${UI.esc(l.actor_name)}</b></td>
+    <td>${UI.esc(l.message)}</td>
+  </tr>`).join('');
+  wrap.innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>الوقت</th><th>الصلاحية</th><th>المنفّذ</th><th>الإجراء</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/* ================= الإداريون (مالك فقط) ================= */
+async function pageAdmins() {
+  view().innerHTML = `<div class="panel">
+    <div class="panel-head"><h2>الحسابات الإدارية</h2><button class="btn btn-primary btn-sm" onclick="openAdminFormModal()">${icon('plus', 14)} إضافة حساب</button></div>
+    <div id="admins-wrap"><span class="spinner"></span></div>
+  </div>`;
+  let res;
+  try { res = await TW.call('testweb_admins', { action: 'list' }); }
+  catch (e) { $('#admins-wrap').innerHTML = UI.errorBox(e.message); return; }
+  const wrap = $('#admins-wrap');
+  const rows = res.admins.map(a => `<tr>
+    <td><b>${UI.esc(a.name)}</b>${a.is_self ? ' <span class="muted">(أنتَ)</span>' : ''}</td>
+    <td dir="ltr">${UI.esc(a.phone)}</td>
+    <td>${UI.badge(a.type === 'owner' ? 'purple' : 'blue', a.type === 'owner' ? 'مسؤول إداري' : 'إداري')}</td>
+    <td>${UI.esc(a.gender === 'female' ? 'أنثى' : 'ذكر')}</td>
+    <td>${a.active ? UI.badge('green', 'مُفعّل') : UI.badge('red', 'مُعطّل')}</td>
+    <td class="muted">${UI.fmtDate(a.last_opened_in)}</td>
+    <td>${a.is_self ? '' : `
+      <button class="icon-btn" title="تعديل" onclick='openAdminFormModal(${JSON.stringify(a).replace(/'/g, "&#39;")})'>${icon('edit', 14)}</button>
+      <button class="icon-btn" title="${a.active ? 'إلغاء التفعيل' : 'إعادة التفعيل'}" onclick="toggleAdmin('${a.id}')">${icon(a.active ? 'ban' : 'check', 14)}</button>
+    `}</td>
+  </tr>`).join('');
+  wrap.innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>الاسم</th><th>الهاتف</th><th>الصلاحية</th><th>الجنس</th><th>الحالة</th><th>آخر دخول</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+async function toggleAdmin(id) {
+  if (!await UI.confirm('تأكيد', 'هل تريد تغيير حالة تفعيل هذا الحساب؟', 'تأكيد')) return;
+  try { await TW.call('testweb_admins', { action: 'toggle_active', id }); UI.toast('تم تحديث الحالة', 'ok'); pageAdmins(); }
+  catch (e) { UI.toast(e.message, 'err'); }
+}
+function openAdminFormModal(admin) {
+  const isEdit = !!admin;
+  const body = `<div class="form-grid">
+    ${fieldHtml('الاسم الكامل', 'name', admin?.name)}
+    ${fieldHtml('رقم الهاتف', 'phone', admin?.phone)}
+    ${isEdit ? '' : fieldHtml('البريد الإلكتروني', 'email', '', 'email')}
+    ${selectHtml('الجنس', 'gender', admin?.gender || 'male', [['male', 'ذكر'], ['female', 'أنثى']])}
+    ${selectHtml('الصلاحية', 'type', admin?.type || 'admin', [['admin', 'إداري'], ['owner', 'مسؤول إداري']])}
+    ${fieldHtml(isEdit ? 'كلمة مرور جديدة (اختياري)' : 'كلمة المرور', 'password', '', 'password')}
+  </div>`;
+  const foot = `<button class="btn btn-primary" id="md-ok">${isEdit ? 'حفظ التعديلات' : 'إضافة'}</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal(isEdit ? 'تعديل حساب إداري' : 'إضافة حساب إداري', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    if (isEdit) {
+      await runAction(ev.target, () => TW.call('testweb_admins', { action: 'edit', id: admin.id, fields: f }),
+        { okMsg: 'تم حفظ التعديلات', modal: m, refreshDash: false, after: () => pageAdmins() });
+    } else {
+      if (!f.name || !f.phone || !f.email || !f.password) { UI.toast('جميع الحقول مطلوبة', 'err'); return; }
+      await runAction(ev.target, () => TW.call('testweb_admins', { action: 'add', fields: f }),
+        { okMsg: 'تمت إضافة الحساب', modal: m, refreshDash: false, after: () => pageAdmins() });
+    }
+  };
+}
+
+/* ================= سجل الطلاب لليوم ================= */
+function recordsTable(rows) {
+  if (!rows.length) return UI.empty('لا سجلّات', 'records');
+  const body = rows.map(r => `<tr>
+    <td class="muted">${UI.fmtDateShort(r.date)}</td>
+    <td><b>${UI.esc(r.student_name)}</b></td>
+    <td>${UI.esc(r.teacher_name)}</td>
+    <td>${UI.esc(r.save_name)}</td>
+    <td>${UI.esc(r.page_label)}</td>
+    <td>${UI.gradeBadge(r.grade_kind, r.status_label)}</td>
+    <td class="muted">${UI.esc(r.sowad)}</td><td class="muted">${UI.esc(r.nisyan)}</td><td class="muted">${UI.esc(r.fateh)}</td>
+  </tr>`).join('');
+  return `<div class="tbl-wrap"><table>
+    <thead><tr><th>التاريخ</th><th>الطالب</th><th>المشرف</th><th>الحفظة</th><th>الصفحة/النوع</th><th>الحالة</th><th>تسويد</th><th>نسيان</th><th>فتح</th></tr></thead>
+    <tbody>${body}</tbody></table></div>`;
+}
+
+async function pageTodayLog() {
+  view().innerHTML = `<div class="panel">
+    <div class="panel-head"><h2>سجل الطلاب لليوم</h2><div id="tl-actions"></div></div>
+    <div id="tl-wrap"><span class="spinner"></span></div>
+  </div>`;
+  let res;
+  try { res = await TW.call('testweb_records', { action: 'today' }); }
+  catch (e) { $('#tl-wrap').innerHTML = UI.errorBox(e.message); return; }
+  $('#tl-actions').innerHTML = `<button class="btn btn-primary btn-sm" id="tl-export">${icon('download', 14)} تصدير Excel</button>`;
+  $('#tl-export').onclick = () => exportRowsToExcel(res.rows, `سجل الطلاب ليوم ${res.date}`, `سجل-اليوم-${res.date}.xlsx`);
+  $('#tl-wrap').innerHTML = `<p class="muted" style="margin-bottom:10px">التاريخ: ${UI.esc(res.date)} — عدد الصفوف: ${res.count}</p>${recordsTable(res.rows)}`;
+}
+
+/* ================= سجل الطلاب (كامل) ================= */
+async function pageFullLog() {
+  view().innerHTML = `<div class="panel">
+    <div class="panel-head"><h2>سجل الطلاب</h2><button class="btn btn-primary btn-sm" id="fl-export-all">${icon('download', 14)} تصدير الكل (Excel)</button></div>
+    <div class="search-box" style="margin-bottom:14px;width:100%">${icon('search', 16)}<input id="fl-q" placeholder="ابحث باسم الطالب"></div>
+    <div id="fl-list"><span class="spinner"></span></div>
+  </div>`;
+  $('#fl-export-all').onclick = () => exportAllStudents();
+  let res;
+  try { res = await TW.call('testweb_records', { action: 'all_students' }); }
+  catch (e) { $('#fl-list').innerHTML = UI.errorBox(e.message); return; }
+  const render = q => {
+    const list = q ? res.students.filter(s => (s.full_name || '').toLowerCase().includes(q.toLowerCase())) : res.students;
+    $('#fl-list').innerHTML = list.length
+      ? `<div style="display:grid;gap:8px">${list.map(s => `<div class="entity-card" onclick="location.hash='#/full-log/${UI.attr(s.user_id)}'">
+          <div class="avatar">${icon('students', 18)}</div>
+          <div class="entity-info"><div class="name">${UI.esc(s.full_name)}</div><div class="sub">${s.gender === 'female' ? 'أنثى' : 'ذكر'}</div></div>
+        </div>`).join('')}</div>`
+      : UI.empty('لا نتائج', 'search');
+  };
+  render(''); $('#fl-q').addEventListener('input', e => render(e.target.value));
+}
+async function pageFullLogStudent(userId) {
+  view().innerHTML = `<button class="btn btn-ghost btn-sm" onclick="history.back()" style="margin-bottom:14px">→ رجوع</button>
+    <div class="panel"><div class="panel-head"><h2 id="fls-title">سجل الطالب</h2><div id="fls-actions"></div></div><div id="fls-wrap"><span class="spinner"></span></div></div>`;
+  let res;
+  try { res = await TW.call('testweb_records', { action: 'student_full', user_id: userId }); }
+  catch (e) { $('#fls-wrap').innerHTML = UI.errorBox(e.message); return; }
+  $('#fls-title').textContent = `سجل الطالب: ${res.student_name}`;
+  $('#fls-actions').innerHTML = `<button class="btn btn-primary btn-sm" id="fls-export">${icon('download', 14)} تصدير Excel</button>`;
+  $('#fls-export').onclick = () => exportRowsToExcel(res.rows, `سجل الطالب ${res.student_name}`, `سجل-${res.student_name}.xlsx`);
+  $('#fls-wrap').innerHTML = recordsTable(res.rows);
+}
+
+function exportRowsToExcel(rows, title, fileName) {
+  if (!window.XLSX) { UI.toast('مكتبة التصدير غير متوفرة', 'err'); return; }
+  const headers = ['التاريخ', 'الطالب', 'المشرف', 'الحفظة', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح'];
+  const aoa = [[title], [`عدد الصفوف: ${rows.length} — ${new Date().toLocaleString('ar-EG')}`], [], headers];
+  rows.forEach(r => aoa.push([UI.fmtDateShort(r.date), r.student_name, r.teacher_name, r.save_name, r.page_label, r.status_label, r.sowad, r.nisyan, r.fateh]));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'البيانات');
+  XLSX.writeFile(wb, fileName);
+}
+async function exportAllStudents() {
+  if (!window.XLSX) { UI.toast('مكتبة التصدير غير متوفرة', 'err'); return; }
+  try {
+    UI.toast('جارٍ تجهيز الملف...', 'info', 2000);
+    const res = await TW.call('testweb_records', { action: 'full_all' });
+    const wb = XLSX.utils.book_new();
+    const used = new Set();
+    res.students.forEach(st => {
+      let name = (st.student_name || 'طالب').replace(/[\\/?*\[\]:]/g, '').slice(0, 28) || 'طالب';
+      const base = name; let i = 1; while (used.has(name)) name = `${base}_${i++}`; used.add(name);
+      const aoa = [[st.student_name], [], ['التاريخ', 'المشرف', 'الحفظة', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح']];
+      st.rows.forEach(r => aoa.push([UI.fmtDateShort(r.date), r.teacher_name, r.save_name, r.page_label, r.status_label, r.sowad, r.nisyan, r.fateh]));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    });
+    XLSX.writeFile(wb, `سجل-جميع-الطلاب-${baghdadDateStr()}.xlsx`);
+  } catch (e) { UI.toast(e.message, 'err'); }
+}
+
+/* ================= إضافة طالب / مشرف ================= */
+function pageAddStudent() {
+  view().innerHTML = `<div class="panel" style="max-width:560px">
+    <div class="panel-head"><h2>إضافة طالب جديد</h2></div>
+    <div class="form-grid">
+      ${fieldHtml('الاسم الكامل', 'full_name', '')}
+      ${fieldHtml('رقم الهاتف', 'phone', '', 'tel')}
+      ${selectHtml('الجنس', 'gender', 'male', [['male', 'ذكر'], ['female', 'أنثى']])}
+      ${selectHtml('المشرف', 'teacher_id', '', [['', '— اختر مشرفاً —']].concat(teacherOptions()))}
+      ${fieldHtml('اسم الحفظة', 'save_name', '')}
+      ${fieldHtml('من صفحة', 'start_page', '', 'number')}
+      ${fieldHtml('إلى صفحة', 'end_page', '', 'number')}
+      ${fieldHtml('الورد اليومي', 'every_day_page', '1', 'number')}
+    </div>
+    <button class="btn btn-primary btn-block" id="as-submit" style="margin-top:18px">إضافة الطالب</button>
+  </div>`;
+  $('#as-submit').onclick = async ev => {
+    const root = ev.target.closest('.panel');
+    const f = collectFields(root);
+    if (!f.full_name || !f.phone || !f.teacher_id || !f.save_name || !f.start_page || !f.end_page || !f.every_day_page) {
+      UI.toast('جميع الحقول مطلوبة', 'err'); return;
+    }
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'add_student', fields: f }), {
+      okMsg: 'تمت إضافة الطالب', refreshDash: true,
+      after: r => {
+        const m = UI.modal('تمت الإضافة بنجاح', `<p class="muted" style="margin-bottom:10px">كلمة مرور الطالب الجديد:</p>${UI.pwField(r.password)}`,
+          `<button class="btn btn-primary" id="md-go">عرض ملف الطالب</button>`);
+        m.el.querySelector('#md-go').onclick = () => { m.close(); location.hash = `#/students/${r.user_id}`; };
+      },
+    });
+  };
+}
+function pageAddTeacher() {
+  view().innerHTML = `<div class="panel" style="max-width:560px">
+    <div class="panel-head"><h2>إضافة مشرف جديد</h2></div>
+    <div class="form-grid">
+      ${fieldHtml('الاسم الكامل', 'full_name', '')}
+      ${fieldHtml('رقم الهاتف', 'phone', '', 'tel')}
+      ${selectHtml('الجنس', 'gender', 'male', [['male', 'ذكر'], ['female', 'أنثى']])}
+    </div>
+    <button class="btn btn-primary btn-block" id="at-submit" style="margin-top:18px">إضافة المشرف</button>
+  </div>`;
+  $('#at-submit').onclick = async ev => {
+    const root = ev.target.closest('.panel');
+    const f = collectFields(root);
+    if (!f.full_name || !f.phone) { UI.toast('الاسم والهاتف مطلوبان', 'err'); return; }
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'add_teacher', fields: f }), {
+      okMsg: 'تمت إضافة المشرف', refreshDash: true,
+      after: r => {
+        const m = UI.modal('تمت الإضافة بنجاح', `<p class="muted" style="margin-bottom:10px">كلمة مرور المشرف الجديد:</p>${UI.pwField(r.password)}`,
+          `<button class="btn btn-primary" id="md-go">عرض ملف المشرف</button>`);
+        m.el.querySelector('#md-go').onclick = () => { m.close(); location.hash = `#/teachers/${r.teacher_id}`; };
+      },
+    });
+  };
+}
+
+window.addEventListener('DOMContentLoaded', () => { wireLogin(); boot(); });

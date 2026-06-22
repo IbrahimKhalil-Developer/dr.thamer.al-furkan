@@ -2,70 +2,68 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>لوحة تحكم — مشروع التحفيظ المُتقِن</title>
+<link rel="icon" href="./icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./css/app.css">
 </head>
 <body>
 
-<!-- شاشة الإعداد الأولى -->
-<div id="setup" class="setup hidden">
-  <div class="setup-card">
-    <div class="brand-mark">﷽</div>
-    <h1>لوحة تحكم التحفيظ المُتقِن</h1>
-    <p class="muted">أدخل بيانات الاتصال بمشروع Supabase لمرّة واحدة. تُحفظ محلياً في متصفحك فقط.</p>
-    <label>رابط مشروع Supabase</label>
-    <input id="cfg-url" type="text" placeholder="https://xxxx.supabase.co" dir="ltr">
-    <label>المفتاح العام (anon key)</label>
-    <input id="cfg-key" type="password" placeholder="eyJhbGciOi..." dir="ltr">
-    <button id="cfg-save" class="btn btn-primary btn-block">حفظ والدخول</button>
-    <p id="cfg-err" class="err-text hidden"></p>
+<div id="boot" class="boot">
+  <div class="boot-mark"><img src="./icon.png" alt="" onerror="this.style.display='none'"></div>
+  <div class="spinner lg"></div>
+</div>
+
+<div id="login" class="login hidden">
+  <div class="login-card">
+    <div class="login-logo"><img src="./icon.png" alt="" onerror="this.style.display='none'"></div>
+    <h1>مشروع التحفيظ المُتقِن</h1>
+    <p class="muted">لوحة الإدارة — تسجيل الدخول</p>
+    <div class="field"><label>البريد الإلكتروني</label>
+      <input id="lg-email" type="email" dir="ltr" autocomplete="username" placeholder="admin@example.com"></div>
+    <div class="field"><label>كلمة المرور</label>
+      <input id="lg-pass" type="password" dir="ltr" autocomplete="current-password" placeholder="••••••••"></div>
+    <button id="lg-btn" class="btn btn-primary btn-block btn-lg">دخول</button>
+    <p id="lg-err" class="err-text hidden"></p>
   </div>
 </div>
 
-<!-- التطبيق -->
 <div id="app" class="app hidden">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-head">
-      <div class="logo">﷽</div>
-      <div class="logo-text">
-        <strong>التحفيظ المُتقِن</strong>
-        <span>لوحة الإدارة</span>
-      </div>
+      <div class="logo"><img src="./icon.png" alt="" onerror="this.parentElement.classList.add('noimg')"></div>
+      <div class="logo-text"><strong>التحفيظ المُتقِن</strong><span>لوحة الإدارة</span></div>
     </div>
-    <nav class="nav" id="nav">
-      <a href="#/" data-route="/"><span class="ic">▦</span> النظرة العامة</a>
-      <a href="#/students" data-route="/students"><span class="ic">🎓</span> الطلاب</a>
-      <a href="#/teachers" data-route="/teachers"><span class="ic">👤</span> المشرفون</a>
-      <a href="#/messages" data-route="/messages"><span class="ic">✉</span> الرسائل</a>
-      <a href="#/otps" data-route="/otps"><span class="ic">🔑</span> رموز الدخول</a>
-    </nav>
+    <nav class="nav" id="nav"></nav>
     <div class="sidebar-foot">
-      <button id="btn-refresh" class="btn btn-ghost btn-block">↻ تحديث البيانات</button>
-      <button id="btn-logout" class="btn btn-ghost btn-block">⎋ تغيير الاتصال</button>
+      <button id="btn-refresh" class="btn btn-ghost btn-block" data-ic="refresh">تحديث البيانات</button>
+      <button id="btn-logout" class="btn btn-ghost btn-block" data-ic="logout">تسجيل الخروج</button>
     </div>
   </aside>
 
   <div class="main">
     <header class="topbar">
-      <button id="menu-toggle" class="icon-btn only-mobile">☰</button>
-      <div id="page-title" class="page-title">النظرة العامة</div>
-      <div class="top-actions">
-        <span id="conn-dot" class="conn-dot" title="حالة الاتصال"></span>
+      <button id="menu-toggle" class="icon-btn only-mobile" data-ic="menu"></button>
+      <div class="brand-center">
+        <span class="brand-name">مشروع التحفيظ المُتقِن</span>
+        <span id="admin-line" class="admin-line"></span>
       </div>
+      <div id="page-title" class="page-title-pill"></div>
     </header>
     <main id="view" class="view"></main>
   </div>
   <div id="scrim" class="scrim"></div>
 </div>
 
-<!-- حاوية النوافذ والإشعارات -->
 <div id="modal-root"></div>
+<div id="viewer-root"></div>
 <div id="toast-root" class="toast-root"></div>
 
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="./js/icons.js"></script>
 <script src="./js/api.js"></script>
 <script src="./js/ui.js"></script>
 <script src="./js/app.js"></script>

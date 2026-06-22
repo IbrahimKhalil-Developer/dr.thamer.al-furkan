@@ -1,0 +1,105 @@
+import {
+  supabaseAdmin, requireAdmin, requireOwner, SYSTEM_KEY,
+  jsonResponse, preflight, writeLog, toLocalPhone, normalizePhone,
+} from "../_shared/guard.ts";
+
+function adminPublic(a: any, selfId: string) {
+  return {
+    id: a.id, name: a.name ?? "", type: a.type === "owner" ? "owner" : "admin",
+    phone: toLocalPhone(a.phone_number ?? ""), active: a.active === true,
+    gender: a.gender === "female" ? "female" : "male",
+    is_self: String(a.id) === String(selfId),
+    last_opened_in: a.last_opened_in ?? null,
+  };
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return preflight();
+  if (req.method !== "POST") return jsonResponse({ error: true, errors: "الطريقة غير مسموح بها" }, 405);
+
+  const { admin, response } = await requireAdmin(req);
+  if (response) return response;
+  const A = admin!;
+
+  const ownerErr = requireOwner(A);
+  if (ownerErr) return ownerErr;
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const action = String(body?.action ?? "list");
+
+    if (action === "list") {
+      const { data, error } = await supabaseAdmin.from("admins").select("*").order("name");
+      if (error) return jsonResponse({ error: true, errors: error.message }, 400);
+      return jsonResponse({ error: false, admins: (data ?? []).map((a: any) => adminPublic(a, A.id)) });
+    }
+
+    if (action === "add") {
+      const f = body?.fields ?? {};
+      const name = String(f.name ?? "").trim();
+      const phone = String(f.phone ?? "").trim();
+      const email = String(f.email ?? "").trim().toLowerCase();
+      const password = String(f.password ?? "");
+      const type = f.type === "owner" ? "owner" : "admin";
+      const gender = f.gender === "female" ? "female" : "male";
+      if (!name || !phone || !email || !password) return jsonResponse({ error: true, errors: "جميع الحقول مطلوبة" }, 400);
+
+      const { data: row, error } = await supabaseAdmin.from("admins").insert({
+        name, phone_number: normalizePhone(phone), email, password, type, gender, active: true,
+      }).select("id").single();
+      if (error) return jsonResponse({ error: true, errors: error.message }, 400);
+
+      await writeLog(A, `أضاف حساب إداري جديد (${name}) بصلاحية ${type === "owner" ? "مسؤول إداري" : "إداري"}.`);
+      return jsonResponse({ error: false, id: row.id });
+    }
+
+    if (action === "edit") {
+      const id = String(body?.id ?? "");
+      const f = body?.fields ?? {};
+      if (!id) return jsonResponse({ error: true, errors: "id مطلوب" }, 400);
+      if (String(id) === String(A.id)) return jsonResponse({ error: true, errors: "لا يمكنك تعديل حسابك الخاص من هنا" }, 400);
+
+      const patch: Record<string, any> = {};
+      if (f.name != null) patch.name = String(f.name).trim();
+      if (f.phone != null) patch.phone_number = normalizePhone(String(f.phone));
+      if (f.gender != null) patch.gender = f.gender === "female" ? "female" : "male";
+      if (f.type != null) patch.type = f.type === "owner" ? "owner" : "admin";
+      if (f.password) patch.password = String(f.password);
+      if (!Object.keys(patch).length) return jsonResponse({ error: true, errors: "لا توجد تعديلات" }, 400);
+
+      const { data: target } = await supabaseAdmin.from("admins").select("email").eq("id", id).maybeSingle();
+      if (!target) return jsonResponse({ error: true, errors: "الحساب غير موجود" }, 404);
+
+      const { error } = await supabaseAdmin.from("admins").update(patch).eq("id", id);
+      if (error) return jsonResponse({ error: true, errors: error.message }, 400);
+
+      if (f.password) {
+        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const hit = (list?.users ?? []).find((u: any) => (u.email ?? "").toLowerCase() === target.email.toLowerCase());
+        if (hit) await supabaseAdmin.auth.admin.updateUserById(hit.id, { password: String(f.password) + SYSTEM_KEY });
+      }
+
+      await writeLog(A, `عدّل بيانات حساب إداري (${target.email}).`);
+      return jsonResponse({ error: false });
+    }
+
+    if (action === "toggle_active") {
+      const id = String(body?.id ?? "");
+      if (!id) return jsonResponse({ error: true, errors: "id مطلوب" }, 400);
+      if (String(id) === String(A.id)) return jsonResponse({ error: true, errors: "لا يمكنك إلغاء تفعيل حسابك الخاص" }, 400);
+
+      const { data: target } = await supabaseAdmin.from("admins").select("*").eq("id", id).maybeSingle();
+      if (!target) return jsonResponse({ error: true, errors: "الحساب غير موجود" }, 404);
+
+      const newActive = target.active !== true;
+      await supabaseAdmin.from("admins").update({ active: newActive }).eq("id", id);
+
+      await writeLog(A, `${newActive ? "أعاد تفعيل" : "ألغى تفعيل"} حساب إداري (${target.name}).`);
+      return jsonResponse({ error: false, active: newActive });
+    }
+
+    return jsonResponse({ error: true, errors: "إجراء غير معروف" }, 400);
+  } catch (e) {
+    return jsonResponse({ error: true, errors: String(e) }, 500);
+  }
+});

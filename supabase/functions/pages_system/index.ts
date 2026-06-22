@@ -1,5 +1,4 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.8";
-import * as XLSX from "npm:xlsx";
 
 // ════════════════════════════════════════════════════════════════════
 //  ثوابت النصوص الثابتة
@@ -1324,9 +1323,6 @@ Deno.serve(async (req: Request) => {
       } catch (e) { console.error(`[User Loop Error] ${user.user_id}:`, e); }
     }
 
-    // ════════════════════════════════════════════════════════════════
-    //  ملخص المشرفين + Excel
-    // ════════════════════════════════════════════════════════════════
     if (adminSummary.length > 0 && adminPhones.length > 0) {
       const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
       const dayName  = dayNames[new Date(today + "T00:00:00").getDay()] ?? "";
@@ -1336,44 +1332,6 @@ Deno.serve(async (req: Request) => {
         summaryMsg += `${i + 1}- ${r.studentName} | ${r.typeLabel} | ${r.resultLabel}\n`;
       });
       for (const ap of adminPhones) await waha(ap, summaryMsg);
-
-      try {
-        const headers = [
-          "إسم الطالب الكامل","إسم المشرف المسؤول","نوع التسميع",
-          "الصفحة","النتيجة","أخطاء السواد","النسيان","الفتح",
-          "وقت الإستعداد","وقت التسميع","رقم هاتف الطالب","رقم هاتف المشرف",
-        ];
-        const rows = adminSummary.map(r => [
-          r.studentName, r.teacherName, r.typeLabel,
-          r.pageDisp, r.resultLabel,
-          r.sowad, r.nisyan, r.fateh,
-          r.readyAt, r.finishedAt,
-          r.studentPhone, r.teacherPhone,
-        ]);
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-        ws["!dir"] = "rtl";
-        XLSX.utils.book_append_sheet(wb, ws, "السجل");
-        const buffer: Uint8Array = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-        const fileName = `${today.replace(/-/g, "_")}.xlsx`;
-        await supabase.storage.from("Excels").upload(fileName, buffer, {
-          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          upsert: true,
-        });
-        const { data: urlData } = supabase.storage.from("Excels").getPublicUrl(fileName);
-        const publicUrl = urlData?.publicUrl ?? "";
-        if (publicUrl) {
-          const excelMsg = [
-            `سجل الطلاب بصيغة إكسل للتاريخ ${today}`,
-            `الرابط: ${publicUrl}`,
-            ``,
-            `_يرجى التحفظ على الرابط وعدم مشاركته مع أي أحد خارج إدارة المركز._`,
-          ].join("\n");
-          for (const ap of adminPhones) await waha(ap, excelMsg);
-        }
-      } catch (excelErr) {
-        console.error("[EXCEL ERROR]:", excelErr);
-      }
     }
 
     return new Response(JSON.stringify({ success: true }), {

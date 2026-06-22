@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.8";
+import { sendWaha } from "../_shared/guard.ts";
 
 const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")              ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -7,6 +8,8 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+const DEV_PHONE = "9647783922919";
 
 const VALID_TYPES = ["SEND_MESSAGE_TO_DR_THAMER", "APP_SUGGESTION", "APP_ERROR"] as const;
 
@@ -109,6 +112,14 @@ Deno.serve(async (req: Request) => {
   if (insertError) {
     console.error("[stuSEND_REQUEST INSERT]:", insertError);
     return errorResponse("حدث خطأ أثناء إرسال الطلب، يرجى المحاولة لاحقاً", 500);
+  }
+
+  const notifyText = `📩 طلب جديد من الطالب *${sendName}*\nالنوع: ${type}\nالرسالة: ${String(message).trim()}`;
+  if (type === "SEND_MESSAGE_TO_DR_THAMER") {
+    const { data: owners } = await supabaseAdmin.from("admins").select("phone_number").eq("type", "owner").eq("active", true);
+    for (const o of owners ?? []) if (o.phone_number) await sendWaha(o.phone_number, notifyText);
+  } else {
+    await sendWaha(DEV_PHONE, notifyText);
   }
 
   return successResponse();

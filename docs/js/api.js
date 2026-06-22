@@ -1,40 +1,67 @@
-/* ============ طبقة الاتصال بـ Supabase Edge Functions ============ */
 const TW = {
-  urlKey: 'tw_supabase_url',
-  keyKey: 'tw_supabase_key',
+  url: 'https://miyehoqqbyihpwzulgnc.supabase.co',
+  tokKey: 'tw_access_token', refKey: 'tw_refresh_token', adminKey: 'tw_admin',
 
-  get url(){ return (localStorage.getItem(this.urlKey) || '').replace(/\/+$/,''); },
-  get key(){ return localStorage.getItem(this.keyKey) || ''; },
-  get configured(){ return !!this.url; },
+  get accessToken(){ return localStorage.getItem(this.tokKey) || ''; },
+  get refreshToken(){ return localStorage.getItem(this.refKey) || ''; },
+  get admin(){ try{ return JSON.parse(localStorage.getItem(this.adminKey) || 'null'); }catch{ return null; } },
 
-  save(url, key){
-    localStorage.setItem(this.urlKey, url.trim().replace(/\/+$/,''));
-    localStorage.setItem(this.keyKey, key.trim());
+  setSession(accessToken, refreshToken, admin){
+    localStorage.setItem(this.tokKey, accessToken || '');
+    localStorage.setItem(this.refKey, refreshToken || '');
+    if(admin) localStorage.setItem(this.adminKey, JSON.stringify(admin));
   },
-  clear(){ localStorage.removeItem(this.urlKey); localStorage.removeItem(this.keyKey); },
+  clearSession(){
+    localStorage.removeItem(this.tokKey);
+    localStorage.removeItem(this.refKey);
+    localStorage.removeItem(this.adminKey);
+  },
 
   fnUrl(name){ return `${this.url}/functions/v1/${name}`; },
 
-  // استدعاء فِكشن: GET إن لم يوجد body، وإلا POST بصيغة JSON
-  async call(name, body){
+  async raw(name, body){
     const headers = { 'Content-Type':'application/json' };
-    if(this.key){ headers['apikey'] = this.key; headers['Authorization'] = `Bearer ${this.key}`; }
-    const opts = body === undefined
-      ? { method:'GET', headers }
-      : { method:'POST', headers, body: JSON.stringify(body) };
+    if(this.accessToken) headers['Authorization'] = `Bearer ${this.accessToken}`;
     let res;
     try{
-      res = await fetch(this.fnUrl(name), opts);
-    }catch(e){
-      throw new Error('تعذّر الاتصال بالخادم — تحقّق من الرابط والإنترنت');
+      res = await fetch(this.fnUrl(name), { method:'POST', headers, body: JSON.stringify(body || {}) });
+    }catch{
+      throw new Error('تعذّر الاتصال بالخادم، تحقّق من الإنترنت');
     }
     let data = null;
     const txt = await res.text();
     try{ data = txt ? JSON.parse(txt) : null; }catch{ data = { error:true, errors: txt || ('HTTP '+res.status) }; }
-    if(!res.ok || (data && data.error)){
-      const msg = (data && (data.errors || data.error)) || ('HTTP '+res.status);
-      throw new Error(typeof msg === 'string' ? msg : 'خطأ غير معروف');
-    }
-    return data;
+    return { ok: res.ok && !(data && data.error), status: res.status, data };
   },
+
+  async call(name, body){
+    let r = await this.raw(name, body);
+    if(!r.ok && r.data && r.data.code === 'AUTH' && this.refreshToken){
+      const v = await this.verify();
+      if(v && v.error === false) r = await this.raw(name, body);
+    }
+    if(!r.ok){
+      const msg = (r.data && (r.data.errors || r.data.error)) || ('HTTP '+r.status);
+      const err = new Error(typeof msg === 'string' ? msg : 'خطأ غير معروف');
+      err.code = r.data && r.data.code;
+      throw err;
+    }
+    return r.data;
+  },
+
+  async login(email, password){
+    const r = await this.raw('testweb_auth', { action:'login', email, password });
+    if(!r.ok) throw new Error((r.data && r.data.errors) || 'تعذّر تسجيل الدخول');
+    this.setSession(r.data.access_token, r.data.refresh_token, r.data.admin);
+    return r.data.admin;
+  },
+
+  async verify(){
+    const r = await this.raw('testweb_auth', { action:'verify', access_token:this.accessToken, refresh_token:this.refreshToken });
+    if(!r.ok){ this.clearSession(); return r.data; }
+    this.setSession(r.data.access_token, r.data.refresh_token, r.data.admin);
+    return r.data;
+  },
+
+  logout(){ this.clearSession(); },
 };

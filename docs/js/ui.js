@@ -1,90 +1,61 @@
-/* ============ أدوات الواجهة المشتركة ============ */
 const UI = {
   esc(s){
     return String(s ?? '').replace(/[&<>"']/g, c => (
       {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
     ));
   },
-
-  // نص آمن للاستخدام داخل خاصية onclick (مفرد)
   attr(s){ return String(s ?? '').replace(/['"\\]/g, '\\$&'); },
 
   toast(msg, type='info', ms=3200){
     const root = document.getElementById('toast-root');
     const t = document.createElement('div');
-    t.className = `toast ${type}`;
-    const ic = type==='ok' ? '✓' : type==='err' ? '✕' : 'ℹ';
-    t.innerHTML = `<span>${ic}</span><span>${UI.esc(msg)}</span>`;
+    t.className = `toast ${type==='ok'?'success':type==='err'?'error':''}`;
+    t.innerHTML = `${icon(type==='ok'?'check':type==='err'?'alert':'star',18)}<span>${UI.esc(msg)}</span>`;
     root.appendChild(t);
-    setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateX(-20px)'; setTimeout(()=>t.remove(),250); }, ms);
+    setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(),250); }, ms);
   },
 
   async copy(text){
-    try{
-      await navigator.clipboard.writeText(text);
-      UI.toast('تم النسخ', 'ok', 1400);
-    }catch{
+    try{ await navigator.clipboard.writeText(text); UI.toast('تم النسخ', 'ok', 1400); }
+    catch{
       const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
-      ta.select(); try{document.execCommand('copy'); UI.toast('تم النسخ','ok',1400);}catch{UI.toast('تعذّر النسخ','err');}
+      ta.select();
+      try{ document.execCommand('copy'); UI.toast('تم النسخ','ok',1400); }catch{ UI.toast('تعذّر النسخ','err'); }
       ta.remove();
     }
   },
 
-  // حقل قابل للنسخ
-  copyField(value, opts={}){
+  copyField(value){
     const v = value==null || value==='' ? '—' : String(value);
-    const canCopy = v !== '—' && opts.copy !== false;
-    const cp = canCopy ? `<button class="cp" title="نسخ" onclick="UI.copy('${UI.attr(v)}')">⧉</button>` : '';
-    return `<span class="copy-field"><span class="val">${UI.esc(v)}</span>${cp}</span>`;
+    const cp = v !== '—' ? `<button class="icon-btn" style="width:26px;height:26px" title="نسخ" onclick="UI.copy('${UI.attr(v)}')">${icon('copy',14)}</button>` : '';
+    return `<span class="copy-row"><span>${UI.esc(v)}</span>${cp}</span>`;
   },
 
-  // حقل كلمة مرور: مخفي بنجوم، زر عرض، زر نسخ
   pwField(value){
     const v = value==null || value==='' ? '' : String(value);
-    if(!v) return `<span class="copy-field"><span class="val">—</span></span>`;
+    if(!v) return '<span>—</span>';
     const id = 'pw'+Math.random().toString(36).slice(2,8);
-    const masked = '•'.repeat(Math.min(10, Math.max(6, v.length)));
-    return `<span class="copy-field pw-field" data-pw="${UI.attr(v)}" data-shown="0" id="${id}">
-      <span class="val pw-hidden">${masked}</span>
-      <button class="eye" title="عرض" onclick="UI.togglePw('${id}')">👁</button>
-      <button class="cp" title="نسخ" onclick="UI.copy('${UI.attr(v)}')">⧉</button>
+    return `<span class="copy-row" data-pw="${UI.attr(v)}" data-shown="0" id="${id}">
+      <span class="val">${'•'.repeat(8)}</span>
+      <button class="icon-btn" style="width:26px;height:26px" title="عرض" onclick="UI.togglePw('${id}')">${icon('eye',14)}</button>
+      <button class="icon-btn" style="width:26px;height:26px" title="نسخ" onclick="UI.copy('${UI.attr(v)}')">${icon('copy',14)}</button>
     </span>`;
   },
   togglePw(id){
     const el = document.getElementById(id); if(!el) return;
     const val = el.getAttribute('data-pw'); const shown = el.getAttribute('data-shown')==='1';
-    const span = el.querySelector('.val'); const eye = el.querySelector('.eye');
-    if(shown){
-      span.textContent = '•'.repeat(Math.min(10, Math.max(6, val.length)));
-      span.classList.add('pw-hidden'); eye.textContent='👁'; el.setAttribute('data-shown','0');
-    }else{
-      span.textContent = val; span.classList.remove('pw-hidden'); eye.textContent='🙈'; el.setAttribute('data-shown','1');
-    }
+    const span = el.querySelector('.val'); const btn = el.querySelector('.icon-btn');
+    if(shown){ span.textContent = '•'.repeat(8); btn.innerHTML = icon('eye',14); el.setAttribute('data-shown','0'); }
+    else{ span.textContent = val; btn.innerHTML = icon('eyeoff',14); el.setAttribute('data-shown','1'); }
   },
 
-  badge(kind, text){ return `<span class="badge ${kind}">${UI.esc(text)}</span>`; },
-
-  progress(pct){
-    const p = Math.max(0, Math.min(100, Number(pct)||0));
-    return `<div class="progress-row"><div class="progress" style="flex:1"><i data-w="${p}"></i></div><span class="pct">${p}%</span></div>`;
+  badge(kind, text, ic){
+    return `<span class="badge badge-${kind}">${ic?icon(ic,13):''}${UI.esc(text)}</span>`;
   },
 
-  // تحريك أشرطة التقدّم بعد الإدراج
-  animateBars(scope){
-    (scope||document).querySelectorAll('.progress > i[data-w]').forEach(i=>{
-      const w=i.getAttribute('data-w'); requestAnimationFrame(()=>{ setTimeout(()=>{ i.style.width=w+'%'; },40); });
-    });
-  },
-
-  // عدّاد متصاعد
-  countUp(el, to){
-    const dur=700, start=performance.now(), from=0;
-    function step(now){
-      const t=Math.min(1,(now-start)/dur); const ease=1-Math.pow(1-t,3);
-      el.textContent = Math.round(from+(to-from)*ease).toLocaleString('ar-EG');
-      if(t<1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
+  gradeBadge(kind, text){
+    const map = { perfect:'green', very_good:'teal', good:'gold', reject:'red', absent:'gray', holiday:'blue', waiting:'purple', neutral:'gray' };
+    return UI.badge(map[kind] || 'gray', text);
   },
 
   initials(name){
@@ -103,36 +74,49 @@ const UI = {
     const d = new Date(s); if(isNaN(d)) return String(s);
     return d.toLocaleDateString('ar-EG', { year:'numeric', month:'2-digit', day:'2-digit' });
   },
-  ago(s){
-    if(!s) return '—';
-    const d=new Date(s); if(isNaN(d)) return '—';
-    const sec=Math.floor((Date.now()-d.getTime())/1000);
-    if(sec<60) return 'قبل ثوانٍ';
-    if(sec<3600) return `قبل ${Math.floor(sec/60)} دقيقة`;
-    if(sec<86400) return `قبل ${Math.floor(sec/3600)} ساعة`;
-    return `قبل ${Math.floor(sec/86400)} يوم`;
-  },
 
-  // نافذة منبثقة
-  modal(title, bodyHtml, footHtml, opts={}){
-    const root=document.getElementById('modal-root');
-    const bg=document.createElement('div'); bg.className='modal-bg';
-    bg.innerHTML=`<div class="modal ${opts.wide?'wide':''}">
-      <div class="modal-head"><h3>${UI.esc(title)}</h3><button class="modal-x">✕</button></div>
+  modal(title, bodyHtml, footHtml){
+    const root = document.getElementById('modal-root');
+    const bg = document.createElement('div'); bg.className = 'modal-back';
+    bg.innerHTML = `<div class="modal">
+      <div class="modal-head"><h3>${UI.esc(title)}</h3><button class="icon-btn modal-x">${icon('close',16)}</button></div>
       <div class="modal-body">${bodyHtml}</div>
-      ${footHtml?`<div class="modal-foot">${footHtml}</div>`:''}
+      ${footHtml ? `<div class="modal-foot">${footHtml}</div>` : ''}
     </div>`;
     root.appendChild(bg);
-    const close=()=>{ bg.style.opacity='0'; setTimeout(()=>bg.remove(),180); };
-    bg.querySelector('.modal-x').onclick=close;
-    bg.addEventListener('mousedown', e=>{ if(e.target===bg) close(); });
-    UI.animateBars(bg);
-    return { el:bg, close };
+    const close = () => bg.remove();
+    bg.querySelector('.modal-x').onclick = close;
+    bg.addEventListener('mousedown', e => { if(e.target===bg) close(); });
+    return { el: bg, close };
   },
 
-  errorBox(msg){
-    return `<div class="empty"><div class="ic">⚠️</div><div style="font-weight:700;color:var(--red)">${UI.esc(msg)}</div></div>`;
+  confirm(title, msg, okLabel='تأكيد'){
+    return new Promise(resolve => {
+      const m = UI.modal(title, `<p>${UI.esc(msg)}</p>`,
+        `<button class="btn btn-ghost" id="cf-no">إلغاء</button><button class="btn btn-danger" id="cf-yes">${UI.esc(okLabel)}</button>`);
+      m.el.querySelector('#cf-no').onclick = () => { m.close(); resolve(false); };
+      m.el.querySelector('#cf-yes').onclick = () => { m.close(); resolve(true); };
+    });
   },
-  empty(text, ic='📭'){ return `<div class="empty"><div class="ic">${ic}</div><div>${UI.esc(text)}</div></div>`; },
-  skeletonCards(n=8){ return `<div class="grid">${Array.from({length:n},()=>'<div class="skeleton sk-card"></div>').join('')}</div>`; },
+
+  viewPhoto(url, downloadName){
+    const root = document.getElementById('viewer-root');
+    const bg = document.createElement('div'); bg.className = 'viewer-back';
+    bg.innerHTML = `<div class="viewer-actions">
+        <a class="icon-btn" href="${UI.attr(url)}" download="${UI.attr(downloadName||'photo.jpg')}" target="_blank">${icon('download',18)}</a>
+        <button class="icon-btn viewer-x">${icon('close',18)}</button>
+      </div>
+      <img class="viewer-img" src="${UI.attr(url)}">`;
+    root.appendChild(bg);
+    const close = () => bg.remove();
+    bg.querySelector('.viewer-x').onclick = close;
+    bg.addEventListener('mousedown', e => { if(e.target===bg) close(); });
+  },
+
+  empty(text, ic='page'){
+    return `<div class="empty-state">${icon(ic,40)}<div>${UI.esc(text)}</div></div>`;
+  },
+  errorBox(msg){
+    return `<div class="empty-state">${icon('alert',40)}<div style="color:var(--red);font-weight:700">${UI.esc(msg)}</div></div>`;
+  },
 };

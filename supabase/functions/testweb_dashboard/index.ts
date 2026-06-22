@@ -10,7 +10,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
 };
 
 function jsonResponse(payload: any, status = 200): Response {
@@ -20,7 +20,6 @@ function jsonResponse(payload: any, status = 200): Response {
   });
 }
 
-// 964xxxxxxxxxx → 0xxxxxxxxxx
 function toLocalPhone(p: string): string {
   const s = String(p ?? "").trim();
   if (s.startsWith("964"))  return "0" + s.slice(3);
@@ -50,18 +49,20 @@ function absenceTotal(raw: any): number {
   return 0;
 }
 
-function calcProgress(save: any, pagesForSave: any[]): number {
+// progress = (آخر صفحة مُنجزة غير راسبة - بداية الحفظ + 1) / (نهاية - بداية + 1)
+function calcProgress(save: any, pagesForSave: any[]): { pct: number; saved: number; total: number } {
   const start = Number(save.start_page);
   const end   = Number(save.end_page);
   const total = (end - start) + 1;
-  if (!(total > 0)) return 0;
+  if (!(total > 0)) return { pct: 0, saved: 0, total: 0 };
   const finished = pagesForSave.filter(
     (p) => p.status === "finished" && p.page_status !== "reject"
   );
-  if (!finished.length) return 0;
+  if (!finished.length) return { pct: 0, saved: 0, total };
   const maxPage = Math.max(...finished.map((p) => Number(p.page) || 0));
-  const saved   = (maxPage - start) + 1;
-  return Math.max(0, Math.min(100, Math.round((saved / total) * 100)));
+  const saved   = Math.max(0, (maxPage - start) + 1);
+  const pct     = Math.max(0, Math.min(100, Math.round((saved / total) * 100)));
+  return { pct, saved, total };
 }
 
 Deno.serve(async (req: Request) => {
@@ -72,11 +73,11 @@ Deno.serve(async (req: Request) => {
   try {
     const [usersRes, savesRes, teachersRes, pagesRes] = await Promise.all([
       supabaseAdmin.from("users")
-        .select("user_id, full_name, gender, user_phone_number, father_phone_number, save_id, teacher_id, joined, profile_incomplete, absence, created_at"),
+        .select("user_id, full_name, gender, user_phone_number, father_phone_number, save_id, teacher_id, joined, profile_incomplete, absence, photo_url, created_at, last_logined_in"),
       supabaseAdmin.from("users_saves")
-        .select("id, user_id, teacher_id, name, status, start_page, end_page, every_day_page, teacher_name"),
+        .select("id, user_id, teacher_id, name, status, start_page, end_page, every_day_page, teacher_name, exam1, exam2"),
       supabaseAdmin.from("teachers")
-        .select("teacher_id, full_name, gender, phone_number, joined, joined_in"),
+        .select("teacher_id, full_name, gender, phone_number, joined, joined_in, absence, created_at"),
       supabaseAdmin.from("users_pages")
         .select("save_id, status, page_status, page"),
     ]);
@@ -90,11 +91,9 @@ Deno.serve(async (req: Request) => {
     const teachers = teachersRes.data ?? [];
     const pages    = pagesRes.data    ?? [];
 
-    // maps
     const teacherMap = new Map<string, any>(teachers.map((t: any) => [String(t.teacher_id), t]));
     const saveMap    = new Map<string, any>(saves.map((s: any) => [String(s.id), s]));
 
-    // pages grouped by save_id (for progress)
     const pagesBySave = new Map<string, any[]>();
     for (const p of pages) {
       const k = String(p.save_id);
@@ -102,8 +101,8 @@ Deno.serve(async (req: Request) => {
       pagesBySave.get(k)!.push(p);
     }
 
-    // students count per teacher (by current save's teacher)
     const studentsPerTeacher = new Map<string, number>();
+    let progressSum = 0, progressCount = 0;
 
     const students = users.map((u: any) => {
       const save = u.save_id ? saveMap.get(String(u.save_id)) : null;
@@ -113,29 +112,38 @@ Deno.serve(async (req: Request) => {
 
       let saveOut: any = null;
       if (save) {
+        const pr = calcProgress(save, pagesBySave.get(String(save.id)) ?? []);
+        progressSum += pr.pct; progressCount++;
         saveOut = {
-          name:          save.name ?? "",
-          status:        save.status ?? "",
-          status_label:  saveStatusLabel(save.status ?? ""),
-          start_page:    save.start_page ?? null,
-          end_page:      save.end_page ?? null,
+          id:             save.id,
+          name:           save.name ?? "",
+          status:         save.status ?? "",
+          status_label:   saveStatusLabel(save.status ?? ""),
+          start_page:     save.start_page ?? null,
+          end_page:       save.end_page ?? null,
           every_day_page: save.every_day_page ?? null,
-          progress_pct:  calcProgress(save, pagesBySave.get(String(save.id)) ?? []),
+          progress_pct:   pr.pct,
+          saved_pages:    pr.saved,
+          total_pages:    pr.total,
         };
       }
 
       return {
-        user_id:           u.user_id ?? "",
-        full_name:         u.full_name ?? "",
-        gender:            u.gender ?? "",
-        gender_label:      genderLabel(u.gender ?? ""),
-        phone:             toLocalPhone(u.user_phone_number ?? ""),
-        father_phone:      toLocalPhone(u.father_phone_number ?? ""),
-        joined:            u.joined === true,
+        user_id:            u.user_id ?? "",
+        full_name:          u.full_name ?? "",
+        gender:             u.gender ?? "",
+        gender_label:       genderLabel(u.gender ?? ""),
+        phone:              toLocalPhone(u.user_phone_number ?? ""),
+        father_phone:       toLocalPhone(u.father_phone_number ?? ""),
+        joined:             u.joined === true,
         profile_incomplete: u.profile_incomplete === true,
-        absence_total:     absenceTotal(u.absence),
-        teacher_name:      teacher?.full_name ?? save?.teacher_name ?? "—",
-        save:              saveOut,
+        absence_total:      absenceTotal(u.absence),
+        has_photo:          !!u.photo_url && u.gender === "male",
+        teacher_id:         teacherId,
+        teacher_name:       teacher?.full_name ?? save?.teacher_name ?? "—",
+        last_logined_in:    u.last_logined_in ?? null,
+        created_at:         u.created_at ?? null,
+        save:               saveOut,
       };
     });
 
@@ -147,16 +155,26 @@ Deno.serve(async (req: Request) => {
       phone:          toLocalPhone(t.phone_number ?? ""),
       joined:         t.joined === true,
       joined_in:      t.joined_in ?? null,
+      absence_total:  absenceTotal(t.absence),
       students_count: studentsPerTeacher.get(String(t.teacher_id)) ?? 0,
+      created_at:     t.created_at ?? null,
     }));
 
     const stats = {
-      students_total: students.length,
-      teachers_total: teachersOut.length,
-      active_saves:   saves.filter((s: any) => s.status === "ACTIVE").length,
-      in_exam:        saves.filter((s: any) => s.status === "IN_EXAM1" || s.status === "IN_EXAM2").length,
-      finished_saves: saves.filter((s: any) => s.status === "FINISHED").length,
-      not_joined:     students.filter((s: any) => !s.joined).length,
+      students_total:     students.length,
+      students_male:      students.filter((s: any) => s.gender === "male").length,
+      students_female:    students.filter((s: any) => s.gender === "female").length,
+      teachers_total:     teachersOut.length,
+      teachers_joined:    teachersOut.filter((t: any) => t.joined).length,
+      active_saves:       saves.filter((s: any) => s.status === "ACTIVE").length,
+      in_exam:            saves.filter((s: any) => s.status === "IN_EXAM1" || s.status === "IN_EXAM2").length,
+      finished_saves:     saves.filter((s: any) => s.status === "FINISHED").length,
+      suspended_saves:    saves.filter((s: any) => s.status === "SUSPENDED").length,
+      not_joined:         students.filter((s: any) => !s.joined).length,
+      profile_incomplete: students.filter((s: any) => s.profile_incomplete).length,
+      with_absence:       students.filter((s: any) => s.absence_total > 0).length,
+      avg_progress:       progressCount ? Math.round(progressSum / progressCount) : 0,
+      total_saves:        saves.length,
     };
 
     return jsonResponse({ error: false, stats, students, teachers: teachersOut });

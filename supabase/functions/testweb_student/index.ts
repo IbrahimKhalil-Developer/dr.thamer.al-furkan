@@ -10,7 +10,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
 };
 
 function jsonResponse(payload: any, status = 200): Response {
@@ -43,7 +43,7 @@ function saveStatusLabel(s: string): string {
   }
 }
 
-// page/test row status → human label (for viewing, not the cron's after-the-fact semantics)
+// نفس قاموس pages_system: status + page_status → نص عربي (مع تبادل good/very_good)
 function rowStatusLabel(status: string, pageStatus: string, isFU: boolean, iFT: boolean): string {
   switch (status) {
     case "not_ready":       return "لم يُسمّع بعد";
@@ -66,7 +66,6 @@ function rowStatusLabel(status: string, pageStatus: string, isFU: boolean, iFT: 
   }
 }
 
-// grade kind for color coding on the client
 function gradeKind(status: string, pageStatus: string): string {
   if (status === "user_absence" || status === "teacher_absence" || status === "not_ready") return "absent";
   if (status === "holiday" || status === "public_holiday" || status === "teacher_holiday") return "holiday";
@@ -86,27 +85,19 @@ function examTypeLabel(t: string): string {
   return t || "—";
 }
 
-function errorsText(raw: any): string {
-  if (!raw || typeof raw !== "object") return "—";
-  const parts: string[] = [];
-  if (raw.sowad  != null) parts.push(`تسويد: ${raw.sowad}`);
-  if (raw.nisyan != null) parts.push(`نسيان: ${raw.nisyan}`);
-  if (raw.fateh  != null) parts.push(`فتح: ${raw.fateh}`);
-  return parts.length ? parts.join("، ") : "—";
-}
-
-function calcProgress(save: any, pagesForSave: any[]): number {
+function calcProgress(save: any, pagesForSave: any[]): { pct: number; saved: number; total: number } {
   const start = Number(save.start_page);
   const end   = Number(save.end_page);
   const total = (end - start) + 1;
-  if (!(total > 0)) return 0;
+  if (!(total > 0)) return { pct: 0, saved: 0, total: 0 };
   const finished = pagesForSave.filter(
     (p) => p.status === "finished" && p.page_status !== "reject"
   );
-  if (!finished.length) return 0;
+  if (!finished.length) return { pct: 0, saved: 0, total };
   const maxPage = Math.max(...finished.map((p) => Number(p.page) || 0));
-  const saved   = (maxPage - start) + 1;
-  return Math.max(0, Math.min(100, Math.round((saved / total) * 100)));
+  const saved   = Math.max(0, (maxPage - start) + 1);
+  const pct     = Math.max(0, Math.min(100, Math.round((saved / total) * 100)));
+  return { pct, saved, total };
 }
 
 function pageDisp(row: any, edp: number): string {
@@ -138,7 +129,7 @@ Deno.serve(async (req: Request) => {
       supabaseAdmin.from("users_saves").select("*").eq("user_id", userId),
       supabaseAdmin.from("users_pages").select("*").eq("user_id", userId),
       supabaseAdmin.from("users_pages_tests").select("*").eq("user_id", userId),
-      supabaseAdmin.from("teachers").select("teacher_id, full_name, gender"),
+      supabaseAdmin.from("teachers").select("teacher_id, full_name, gender, phone_number"),
     ]);
 
     if (userRes.error)  return jsonResponse({ error: true, errors: userRes.error.message }, 400);
@@ -154,8 +145,19 @@ Deno.serve(async (req: Request) => {
     const teacherGender = new Map<string, boolean>(
       teachers.map((t: any) => [String(t.teacher_id), t.gender === "female"])
     );
+    const teacherName = new Map<string, string>(
+      teachers.map((t: any) => [String(t.teacher_id), t.full_name ?? ""])
+    );
 
-    // group pages/tests by save_id
+    // صورة الطالب (الذكور فقط، عبر رابط موقّت)
+    let photoUrl: string | null = null;
+    if (u.photo_url && u.gender === "male") {
+      const { data: ph } = await supabaseAdmin.storage
+        .from("male_profiles_pictures")
+        .createSignedUrl(String(u.photo_url), 300);
+      photoUrl = ph?.signedUrl ?? null;
+    }
+
     const pagesBySave = new Map<string, any[]>();
     for (const p of pages) {
       const k = String(p.save_id);
@@ -176,18 +178,30 @@ Deno.serve(async (req: Request) => {
       gender_label:       genderLabel(u.gender ?? ""),
       phone:              toLocalPhone(u.user_phone_number ?? ""),
       father_phone:       toLocalPhone(u.father_phone_number ?? ""),
+      email:              u.email ?? "—",
+      password:           u.password ?? "",
       date_of_brith:      u.date_of_brith ?? "—",
       location:           u.user_location ?? "—",
       gps:                u.auto_user_location ?? "—",
+      photo_url:          photoUrl,
       joined:             u.joined === true,
       joined_in:          u.joined_in ?? null,
+      joined_ip:          u.joined_ip ?? null,
+      logined_ip:         u.logined_ip ?? null,
+      opened_ip:          u.opened_ip ?? null,
       last_logined_in:    u.last_logined_in ?? null,
+      last_opened_in:     u.last_opened_in ?? null,
       profile_incomplete: u.profile_incomplete === true,
       absence_total:      (typeof u.absence === "number") ? u.absence : Number(u.absence?.total ?? 0),
+      absence_raw:        u.absence ?? null,
+      teacher_id:         u.teacher_id ?? "",
+      teacher_name:       teacherName.get(String(u.teacher_id)) ?? "—",
+      save_id:            u.save_id ?? null,
+      added_admin:        toLocalPhone(u.added_admin_phone_number ?? ""),
+      edited_admin:       toLocalPhone(u.edited_admin_phone_number ?? ""),
       created_at:         u.created_at ?? null,
     };
 
-    // sort saves by number then id
     const savesSorted = [...saves].sort((a: any, b: any) =>
       (Number(a.number ?? 0) - Number(b.number ?? 0)) || (Number(a.id ?? 0) - Number(b.id ?? 0))
     );
@@ -202,14 +216,18 @@ Deno.serve(async (req: Request) => {
       const pagesOut = savePages.map((p: any) => {
         const iFT = teacherGender.get(String(p.teacher_id)) ?? false;
         return {
+          id:            p.id,
           date:          p.date ?? null,
+          page:          p.page ?? null,
           page_display:  pageDisp(p, edp),
           page_name:     p.page_name ?? "",
+          status:        p.status ?? "",
+          page_status:   p.page_status ?? "",
           status_label:  rowStatusLabel(p.status ?? "", p.page_status ?? "", isFU, iFT),
           grade_kind:    gradeKind(p.status ?? "", p.page_status ?? ""),
-          errors:        errorsText(p.errors_number),
+          errors_number: p.errors_number ?? null,
           teacher_name:  p.teacher_name ?? "—",
-          ready_at:      p.ready_at ?? null,
+          created_at:    p.created_at ?? null,
           finished_at:   p.finished_at ?? null,
           custom_info:   p.custom_info ?? "",
         };
@@ -218,19 +236,25 @@ Deno.serve(async (req: Request) => {
       const testsOut = saveTests.map((t: any) => {
         const iFT = teacherGender.get(String(t.teacher_id)) ?? false;
         return {
+          id:            t.id,
+          type:          t.type ?? "",
           type_label:    examTypeLabel(t.type ?? ""),
           date:          t.date ?? null,
+          status:        t.status ?? "",
+          page_status:   t.page_status ?? "",
           status_label:  rowStatusLabel(t.status ?? "", t.page_status ?? "", isFU, iFT),
           grade_kind:    gradeKind(t.status ?? "", t.page_status ?? ""),
-          errors:        errorsText(t.errors_number),
+          errors_number: t.errors_number ?? null,
           teacher_name:  t.teacher_name ?? "—",
           start_page:    t.start_page ?? null,
           end_page:      t.end_page ?? null,
-          ready_at:      t.ready_at ?? null,
+          created_at:    t.created_at ?? null,
           finished_at:   t.finished_at ?? null,
           custom_info:   t.custom_info ?? "",
         };
       });
+
+      const pr = calcProgress(s, savePages);
 
       return {
         id:                 s.id,
@@ -238,9 +262,8 @@ Deno.serve(async (req: Request) => {
         number:             s.number ?? null,
         status:             s.status ?? "",
         status_label:       saveStatusLabel(s.status ?? ""),
+        teacher_id:         s.teacher_id ?? "",
         teacher_name:       s.teacher_name ?? "—",
-        exam1_teacher_name: s.exam1_teacher_name ?? "—",
-        exam2_teacher_name: s.exam2_teacher_name ?? "—",
         start_page:         s.start_page ?? null,
         end_page:           s.end_page ?? null,
         every_day_page:     s.every_day_page ?? null,
@@ -248,9 +271,15 @@ Deno.serve(async (req: Request) => {
         finished_at:        s.finished_at ?? null,
         exam1:              s.exam1 === true,
         exam2:              s.exam2 === true,
+        exam1_teacher_id:   s.exam1_teacher_id ?? null,
+        exam2_teacher_id:   s.exam2_teacher_id ?? null,
+        exam1_teacher_name: teacherName.get(String(s.exam1_teacher_id)) ?? "—",
+        exam2_teacher_name: teacherName.get(String(s.exam2_teacher_id)) ?? "—",
         exam1_date:         s.exam1_date ?? null,
         exam2_date:         s.exam2_date ?? null,
-        progress_pct:       calcProgress(s, savePages),
+        progress_pct:       pr.pct,
+        saved_pages:        pr.saved,
+        total_pages:        pr.total,
         is_current:         String(u.save_id ?? "") === String(s.id),
         pages:              pagesOut,
         tests:              testsOut,

@@ -18,12 +18,24 @@ jobs:
 
       - name: Deploy all functions with no-verify-jwt
         run: |
+          set +e
+          failed=""
           for dir in supabase/functions/*/; do
             func=$(basename "$dir")
-            echo "Deploying $func..."
+            echo "::group::Deploying $func"
             supabase functions deploy "$func" \
               --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} \
               --no-verify-jwt
+            if [ $? -ne 0 ]; then
+              echo "::error::Deploy failed for $func"
+              failed="$failed $func"
+            fi
+            echo "::endgroup::"
           done
+          if [ -n "$failed" ]; then
+            echo "The following functions failed to deploy:$failed"
+            exit 1
+          fi
+          echo "All functions deployed successfully."
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

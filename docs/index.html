@@ -3,449 +3,71 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>لوحة تحكم مشروع التحفيظ المُتقِن</title>
-<style>
-  :root{
-    --bg:#F4EFE7; --surface:#FFFFFF; --surface-2:#FBF8F3;
-    --text:#2B2722; --muted:#7A7064; --accent:#C96442; --accent-d:#B5512F;
-    --accent-soft:#F3E7E0; --border:#E7DECF; --shadow:0 8px 30px rgba(80,60,40,.10);
-    --green:#2F855A; --green-bg:#E6F4EC; --gold:#B7791F; --gold-bg:#FBF1DA;
-    --teal:#2C7A7B; --teal-bg:#E0F2F1; --red:#C53030; --red-bg:#FCE8E8;
-    --gray:#6B7280; --gray-bg:#EEEDEA; --blue:#2B6CB0; --blue-bg:#E6EFF8;
-    --purple:#6B46C1; --purple-bg:#EFE9FB;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);
-    font-family:"Segoe UI","Tahoma",system-ui,sans-serif;line-height:1.6}
-  a{color:var(--accent);text-decoration:none}
-  .hidden{display:none!important}
-
-  /* ── Setup screen ── */
-  .setup-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-  .setup-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;
-    padding:36px;max-width:480px;width:100%;box-shadow:var(--shadow)}
-  .setup-card h1{font-size:22px;margin:0 0 6px}
-  .setup-card p{color:var(--muted);font-size:14px;margin:0 0 22px}
-  .field{margin-bottom:16px}
-  .field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
-  .field input{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;
-    background:var(--surface-2);font-size:14px;color:var(--text);outline:none;direction:ltr;text-align:left}
-  .field input:focus{border-color:var(--accent)}
-  .field .hint{font-size:12px;color:var(--muted);margin-top:5px}
-  .btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px 20px;
-    font-size:15px;font-weight:700;cursor:pointer;transition:background .15s;width:100%}
-  .btn:hover{background:var(--accent-d)}
-  .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);width:auto;
-    padding:8px 14px;font-size:13px;font-weight:600;border-radius:10px}
-  .btn-ghost:hover{background:var(--surface-2);color:var(--text)}
-
-  /* ── App shell ── */
-  header.bar{position:sticky;top:0;z-index:30;background:rgba(244,239,231,.85);
-    backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:14px 20px;
-    display:flex;align-items:center;gap:14px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px}
-  .brand .dot{width:30px;height:30px;border-radius:9px;background:var(--accent);
-    display:grid;place-items:center;color:#fff;font-size:16px}
-  .bar .spacer{flex:1}
-  .icon-btn{background:var(--surface);border:1px solid var(--border);border-radius:10px;
-    width:38px;height:38px;display:grid;place-items:center;cursor:pointer;font-size:16px}
-  .icon-btn:hover{background:var(--surface-2)}
-  main{max-width:1100px;margin:0 auto;padding:22px 18px 60px}
-
-  /* ── Stats ── */
-  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
-  .stat{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px}
-  .stat .n{font-size:26px;font-weight:800}
-  .stat .l{font-size:13px;color:var(--muted)}
-  .stat.accent .n{color:var(--accent)}
-
-  /* ── Tabs ── */
-  .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
-  .tab{padding:9px 18px;border-radius:11px;border:1px solid var(--border);background:var(--surface);
-    cursor:pointer;font-weight:700;font-size:14px;color:var(--muted)}
-  .tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-
-  .toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
-  .search{flex:1;min-width:200px;position:relative}
-  .search input{width:100%;padding:11px 40px 11px 14px;border:1px solid var(--border);border-radius:12px;
-    background:var(--surface);font-size:14px;outline:none}
-  .search input:focus{border-color:var(--accent)}
-  .search::before{content:"🔍";position:absolute;inset-inline-start:13px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.6}
-
-  /* ── Cards grid ── */
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;
-    cursor:pointer;transition:transform .12s,box-shadow .12s}
-  .card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
-  .card.flat{cursor:default}
-  .card.flat:hover{transform:none;box-shadow:none}
-  .card .top{display:flex;align-items:center;gap:11px;margin-bottom:12px}
-  .avatar{width:42px;height:42px;border-radius:12px;background:var(--accent-soft);color:var(--accent);
-    display:grid;place-items:center;font-weight:800;font-size:17px;flex-shrink:0}
-  .card .name{font-weight:800;font-size:15px}
-  .card .sub{font-size:12.5px;color:var(--muted)}
-  .row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
-  .row .k{color:var(--muted)}
-  .row .v{font-weight:600;text-align:left;direction:ltr}
-
-  /* ── Badges ── */
-  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
-  .b-perfect{background:var(--gold-bg);color:var(--gold)}
-  .b-very_good{background:var(--green-bg);color:var(--green)}
-  .b-good{background:var(--teal-bg);color:var(--teal)}
-  .b-reject{background:var(--red-bg);color:var(--red)}
-  .b-absent{background:var(--gray-bg);color:var(--gray)}
-  .b-holiday{background:var(--blue-bg);color:var(--blue)}
-  .b-waiting{background:var(--purple-bg);color:var(--purple)}
-  .b-neutral{background:var(--gray-bg);color:var(--gray)}
-  .b-active{background:var(--green-bg);color:var(--green)}
-  .b-exam{background:var(--purple-bg);color:var(--purple)}
-  .b-finished{background:var(--gold-bg);color:var(--gold)}
-  .b-suspended{background:var(--red-bg);color:var(--red)}
-  .b-warn{background:var(--gold-bg);color:var(--gold)}
-
-  /* ── Progress ── */
-  .prog{height:8px;background:var(--gray-bg);border-radius:999px;overflow:hidden;margin-top:8px}
-  .prog>i{display:block;height:100%;background:var(--accent);border-radius:999px}
-
-  /* ── Modal ── */
-  .overlay{position:fixed;inset:0;background:rgba(40,30,20,.45);z-index:50;display:flex;
-    justify-content:center;align-items:flex-start;padding:24px;overflow-y:auto}
-  .modal{background:var(--bg);border-radius:20px;max-width:860px;width:100%;box-shadow:var(--shadow);
-    overflow:hidden;margin:auto}
-  .modal .mhead{background:var(--surface);border-bottom:1px solid var(--border);padding:18px 22px;
-    display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:2}
-  .modal .mhead .name{font-weight:800;font-size:18px}
-  .modal .mbody{padding:20px 22px}
-  .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:20px}
-  .info{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 13px}
-  .info .k{font-size:12px;color:var(--muted)}
-  .info .v{font-weight:700;font-size:14px}
-
-  .save-block{background:var(--surface);border:1px solid var(--border);border-radius:16px;
-    margin-bottom:14px;overflow:hidden}
-  .save-head{padding:14px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;flex-wrap:wrap}
-  .save-head .sname{font-weight:800;font-size:15px}
-  .save-head .spacer{flex:1}
-  .save-detail{padding:0 16px 16px;border-top:1px solid var(--border)}
-  .mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:14px 0}
-  .mini{font-size:13px}
-  .mini .k{color:var(--muted);font-size:12px}
-  .mini .v{font-weight:700}
-
-  .tbl-title{font-weight:800;font-size:14px;margin:14px 0 8px;color:var(--accent)}
-  .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px}
-  table{width:100%;border-collapse:collapse;font-size:13px;min-width:520px}
-  th,td{padding:9px 11px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap}
-  th{background:var(--surface-2);font-weight:700;color:var(--muted);font-size:12px}
-  tr:last-child td{border-bottom:none}
-  .empty{color:var(--muted);font-size:13px;padding:10px 2px}
-
-  .center-msg{text-align:center;padding:60px 20px;color:var(--muted)}
-  .spinner{width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--accent);
-    border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .toast{position:fixed;bottom:22px;inset-inline-start:50%;transform:translateX(50%);
-    background:var(--red);color:#fff;padding:11px 18px;border-radius:12px;font-size:14px;z-index:99;box-shadow:var(--shadow)}
-</style>
+<title>لوحة تحكم — مشروع التحفيظ المُتقِن</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./css/app.css">
 </head>
 <body>
 
-<!-- ════ Setup ════ -->
-<div id="setupScreen" class="setup-wrap">
+<!-- شاشة الإعداد الأولى -->
+<div id="setup" class="setup hidden">
   <div class="setup-card">
-    <h1>إعداد لوحة التحكم</h1>
-    <p>أدخل رابط مشروع Supabase الخاص بك مرة واحدة فقط، وسيُحفظ في هذا المتصفح.</p>
-    <div class="field">
-      <label>رابط مشروع Supabase</label>
-      <input id="setupUrl" type="text" placeholder="https://xxxxxxxx.supabase.co" dir="ltr">
-      <div class="hint">من Supabase Dashboard ← Project Settings ← API ← Project URL</div>
-    </div>
-    <div class="field">
-      <label>مفتاح anon (اختياري)</label>
-      <input id="setupKey" type="text" placeholder="اتركه فارغاً إن لم يلزم" dir="ltr">
-      <div class="hint">يُضاف فقط إذا رفض الخادم الطلب بدونه.</div>
-    </div>
-    <button class="btn" id="setupSave">حفظ وفتح اللوحة</button>
+    <div class="brand-mark">﷽</div>
+    <h1>لوحة تحكم التحفيظ المُتقِن</h1>
+    <p class="muted">أدخل بيانات الاتصال بمشروع Supabase لمرّة واحدة. تُحفظ محلياً في متصفحك فقط.</p>
+    <label>رابط مشروع Supabase</label>
+    <input id="cfg-url" type="text" placeholder="https://xxxx.supabase.co" dir="ltr">
+    <label>المفتاح العام (anon key)</label>
+    <input id="cfg-key" type="password" placeholder="eyJhbGciOi..." dir="ltr">
+    <button id="cfg-save" class="btn btn-primary btn-block">حفظ والدخول</button>
+    <p id="cfg-err" class="err-text hidden"></p>
   </div>
 </div>
 
-<!-- ════ App ════ -->
-<div id="app" class="hidden">
-  <header class="bar">
-    <div class="brand"><span class="dot">📖</span><span>مشروع التحفيظ المُتقِن</span></div>
-    <div class="spacer"></div>
-    <button class="icon-btn" id="refreshBtn" title="تحديث">🔄</button>
-    <button class="icon-btn" id="settingsBtn" title="الإعدادات">⚙️</button>
-  </header>
+<!-- التطبيق -->
+<div id="app" class="app hidden">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-head">
+      <div class="logo">﷽</div>
+      <div class="logo-text">
+        <strong>التحفيظ المُتقِن</strong>
+        <span>لوحة الإدارة</span>
+      </div>
+    </div>
+    <nav class="nav" id="nav">
+      <a href="#/" data-route="/"><span class="ic">▦</span> النظرة العامة</a>
+      <a href="#/students" data-route="/students"><span class="ic">🎓</span> الطلاب</a>
+      <a href="#/teachers" data-route="/teachers"><span class="ic">👤</span> المشرفون</a>
+      <a href="#/messages" data-route="/messages"><span class="ic">✉</span> الرسائل</a>
+      <a href="#/otps" data-route="/otps"><span class="ic">🔑</span> رموز الدخول</a>
+    </nav>
+    <div class="sidebar-foot">
+      <button id="btn-refresh" class="btn btn-ghost btn-block">↻ تحديث البيانات</button>
+      <button id="btn-logout" class="btn btn-ghost btn-block">⎋ تغيير الاتصال</button>
+    </div>
+  </aside>
 
-  <main>
-    <div id="content"><div class="center-msg"><div class="spinner"></div>جارٍ تحميل البيانات…</div></div>
-  </main>
+  <div class="main">
+    <header class="topbar">
+      <button id="menu-toggle" class="icon-btn only-mobile">☰</button>
+      <div id="page-title" class="page-title">النظرة العامة</div>
+      <div class="top-actions">
+        <span id="conn-dot" class="conn-dot" title="حالة الاتصال"></span>
+      </div>
+    </header>
+    <main id="view" class="view"></main>
+  </div>
+  <div id="scrim" class="scrim"></div>
 </div>
 
-<div id="modalRoot"></div>
+<!-- حاوية النوافذ والإشعارات -->
+<div id="modal-root"></div>
+<div id="toast-root" class="toast-root"></div>
 
-<script>
-const LS_URL = "tw_supabase_url";
-const LS_KEY = "tw_supabase_key";
-let DATA = null;          // dashboard data
-let activeTab = "students";
-let searchTerm = "";
-
-const $ = (s,r=document)=>r.querySelector(s);
-const esc = (s)=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const initials = (n)=>{const p=String(n||"").trim().split(/\s+/);return ((p[0]?.[0]||"")+(p[1]?.[0]||"")).trim()||"؟";};
-
-function baseUrl(){ return (localStorage.getItem(LS_URL)||"").replace(/\/+$/,""); }
-function apiKey(){ return localStorage.getItem(LS_KEY)||""; }
-
-function fmtDate(s){
-  if(!s) return "—";
-  const d=new Date(s); if(isNaN(d)) return "—";
-  return d.toLocaleDateString("ar-EG-u-nu-latn",{year:"numeric",month:"2-digit",day:"2-digit"});
-}
-function fmtDateTime(s){
-  if(!s) return "—";
-  const d=new Date(s); if(isNaN(d)) return "—";
-  return d.toLocaleString("ar-EG-u-nu-latn",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
-}
-
-async function callFn(name, body){
-  const headers={"Content-Type":"application/json"};
-  const k=apiKey();
-  if(k){ headers["apikey"]=k; headers["Authorization"]="Bearer "+k; }
-  const opt={ method: body?"POST":"GET", headers };
-  if(body) opt.body=JSON.stringify(body);
-  const res=await fetch(`${baseUrl()}/functions/v1/${name}`, opt);
-  const txt=await res.text();
-  let json; try{ json=JSON.parse(txt); }catch{ throw new Error("رد غير صالح من الخادم: "+txt.slice(0,120)); }
-  if(!res.ok || json.error) throw new Error(json.errors||("خطأ "+res.status));
-  return json;
-}
-
-function toast(msg){
-  const t=document.createElement("div"); t.className="toast"; t.textContent=msg;
-  document.body.appendChild(t); setTimeout(()=>t.remove(),4200);
-}
-
-/* ════ boot ════ */
-function boot(){
-  if(!baseUrl()){ $("#setupScreen").classList.remove("hidden"); $("#app").classList.add("hidden"); return; }
-  $("#setupScreen").classList.add("hidden"); $("#app").classList.remove("hidden");
-  loadDashboard();
-}
-
-$("#setupSave").onclick=()=>{
-  const u=$("#setupUrl").value.trim();
-  if(!/^https?:\/\/.+/.test(u)){ alert("يرجى إدخال رابط صحيح يبدأ بـ https://"); return; }
-  localStorage.setItem(LS_URL,u);
-  localStorage.setItem(LS_KEY,$("#setupKey").value.trim());
-  boot();
-};
-$("#settingsBtn").onclick=()=>{
-  $("#setupUrl").value=baseUrl(); $("#setupKey").value=apiKey();
-  $("#setupScreen").classList.remove("hidden"); $("#app").classList.add("hidden");
-};
-$("#refreshBtn").onclick=()=>loadDashboard();
-
-/* ════ dashboard ════ */
-async function loadDashboard(){
-  $("#content").innerHTML='<div class="center-msg"><div class="spinner"></div>جارٍ تحميل البيانات…</div>';
-  try{
-    DATA=await callFn("testweb_dashboard");
-    render();
-  }catch(e){
-    $("#content").innerHTML=`<div class="center-msg">تعذّر تحميل البيانات.<br><br>
-      <span style="color:var(--red)">${esc(e.message)}</span><br><br>
-      <button class="btn-ghost" onclick="document.getElementById('settingsBtn').click()">تعديل الإعدادات</button></div>`;
-  }
-}
-
-function render(){
-  const s=DATA.stats;
-  const statsHtml=`<div class="stats">
-    <div class="stat accent"><div class="n">${s.students_total}</div><div class="l">إجمالي الطلاب</div></div>
-    <div class="stat"><div class="n">${s.teachers_total}</div><div class="l">المشرفون</div></div>
-    <div class="stat"><div class="n">${s.active_saves}</div><div class="l">حفظ نشط</div></div>
-    <div class="stat"><div class="n">${s.in_exam}</div><div class="l">في الاختبار</div></div>
-    <div class="stat"><div class="n">${s.finished_saves}</div><div class="l">حفظ مكتمل</div></div>
-    <div class="stat"><div class="n">${s.not_joined}</div><div class="l">لم ينضموا بعد</div></div>
-  </div>`;
-
-  const tabs=`<div class="tabs">
-    <div class="tab ${activeTab==='students'?'active':''}" data-tab="students">الطلاب (${DATA.students.length})</div>
-    <div class="tab ${activeTab==='teachers'?'active':''}" data-tab="teachers">المشرفون (${DATA.teachers.length})</div>
-  </div>`;
-
-  const toolbar=`<div class="toolbar"><div class="search">
-    <input id="searchInput" type="text" placeholder="بحث بالاسم أو رقم الهاتف…" value="${esc(searchTerm)}"></div></div>`;
-
-  $("#content").innerHTML=statsHtml+tabs+toolbar+`<div id="listArea"></div>`;
-  $("#searchInput").oninput=(e)=>{searchTerm=e.target.value;renderList();};
-  document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{activeTab=t.dataset.tab;searchTerm="";render();});
-  renderList();
-}
-
-function matchSearch(txt){
-  const q=searchTerm.trim(); if(!q) return true;
-  return String(txt||"").includes(q);
-}
-
-function renderList(){
-  if(activeTab==="students") return renderStudents();
-  return renderTeachers();
-}
-
-function renderStudents(){
-  const list=DATA.students.filter(st=>matchSearch(st.full_name)||matchSearch(st.phone));
-  if(!list.length){ $("#listArea").innerHTML='<div class="empty">لا يوجد طلاب مطابقون.</div>'; return; }
-  $("#listArea").innerHTML='<div class="grid">'+list.map(st=>{
-    const sv=st.save;
-    const prog=sv?`<div class="row"><span class="k">التقدّم</span><span class="v">${sv.progress_pct}%</span></div>
-      <div class="prog"><i style="width:${sv.progress_pct}%"></i></div>`:"";
-    const saveLine=sv?`<div class="row"><span class="k">الحفظ</span><span class="v">${esc(sv.name)||"—"}</span></div>
-      <div class="row"><span class="k">الحالة</span><span class="badge ${statusBadgeClass(sv.status)}">${esc(sv.status_label)}</span></div>`
-      :`<div class="row"><span class="k">الحفظ</span><span class="v">لا يوجد</span></div>`;
-    return `<div class="card" data-id="${esc(st.user_id)}">
-      <div class="top">
-        <div class="avatar">${esc(initials(st.full_name))}</div>
-        <div><div class="name">${esc(st.full_name)} ${st.joined?"":'<span class="badge b-warn" style="font-size:10px">لم ينضم</span>'}</div>
-        <div class="sub">${esc(st.gender_label)} · 👨‍🏫 ${esc(st.teacher_name)}</div></div>
-      </div>
-      <div class="row"><span class="k">الهاتف</span><span class="v">${esc(st.phone)||"—"}</span></div>
-      ${saveLine}${prog}
-    </div>`;
-  }).join("")+'</div>';
-  document.querySelectorAll(".card[data-id]").forEach(c=>c.onclick=()=>openStudent(c.dataset.id));
-}
-
-function statusBadgeClass(s){
-  if(s==="ACTIVE")return "b-active";
-  if(s==="FINISHED")return "b-finished";
-  if(s==="SUSPENDED"||s==="TERMINATED")return "b-suspended";
-  if(s==="IN_EXAM1"||s==="IN_EXAM2")return "b-exam";
-  return "b-neutral";
-}
-
-function renderTeachers(){
-  const list=DATA.teachers.filter(t=>matchSearch(t.full_name)||matchSearch(t.phone));
-  if(!list.length){ $("#listArea").innerHTML='<div class="empty">لا يوجد مشرفون مطابقون.</div>'; return; }
-  $("#listArea").innerHTML='<div class="grid">'+list.map(t=>`
-    <div class="card flat">
-      <div class="top">
-        <div class="avatar">${esc(initials(t.full_name))}</div>
-        <div><div class="name">${esc(t.full_name)} ${t.joined?"":'<span class="badge b-warn" style="font-size:10px">لم ينضم</span>'}</div>
-        <div class="sub">${esc(t.gender_label)}</div></div>
-      </div>
-      <div class="row"><span class="k">الهاتف</span><span class="v">${esc(t.phone)||"—"}</span></div>
-      <div class="row"><span class="k">عدد الطلاب</span><span class="v">${t.students_count}</span></div>
-      <div class="row"><span class="k">انضمّ في</span><span class="v">${fmtDate(t.joined_in)}</span></div>
-    </div>`).join("")+'</div>';
-}
-
-/* ════ student detail ════ */
-async function openStudent(id){
-  const root=$("#modalRoot");
-  root.innerHTML=`<div class="overlay"><div class="modal"><div class="mbody">
-    <div class="center-msg"><div class="spinner"></div>جارٍ التحميل…</div></div></div></div>`;
-  root.querySelector(".overlay").onclick=(e)=>{if(e.target===root.querySelector(".overlay"))root.innerHTML="";};
-  try{
-    const r=await callFn("testweb_student",{user_id:id});
-    renderStudentModal(r.user,r.saves);
-  }catch(e){
-    root.innerHTML=""; toast(e.message);
-  }
-}
-
-function renderStudentModal(u,saves){
-  const info=(k,v)=>`<div class="info"><div class="k">${k}</div><div class="v">${esc(v??"—")}</div></div>`;
-  const infoGrid=`<div class="info-grid">
-    ${info("الجنس",u.gender_label)}
-    ${info("هاتف الطالب",u.phone)}
-    ${info("هاتف الأب",u.father_phone)}
-    ${info("تاريخ الميلاد",u.date_of_brith)}
-    ${info("العنوان",u.location)}
-    ${info("الغياب التراكمي",u.absence_total)}
-    ${info("انضمّ",u.joined?"نعم":"لا")}
-    ${info("تاريخ الانضمام",fmtDate(u.joined_in))}
-    ${info("آخر دخول",fmtDateTime(u.last_logined_in))}
-    ${info("اكتمال الملف",u.profile_incomplete?"غير مكتمل":"مكتمل")}
-  </div>`;
-
-  const savesHtml = saves.length ? saves.map((s,i)=>saveBlock(s,i)).join("")
-    : '<div class="empty">لا توجد حفظات لهذا الطالب.</div>';
-
-  $("#modalRoot").innerHTML=`<div class="overlay"><div class="modal">
-    <div class="mhead">
-      <div class="avatar">${esc(initials(u.full_name))}</div>
-      <div class="name">${esc(u.full_name)} ${u.joined?"":'<span class="badge b-warn">لم ينضم بعد</span>'}</div>
-      <div class="spacer"></div>
-      <button class="icon-btn" id="closeModal">✕</button>
-    </div>
-    <div class="mbody">${infoGrid}
-      <div class="tbl-title">الحفظات (${saves.length})</div>
-      ${savesHtml}
-    </div>
-  </div></div>`;
-
-  const ov=$("#modalRoot").querySelector(".overlay");
-  ov.onclick=(e)=>{if(e.target===ov)$("#modalRoot").innerHTML="";};
-  $("#closeModal").onclick=()=>$("#modalRoot").innerHTML="";
-  document.querySelectorAll(".save-head").forEach(h=>h.onclick=()=>{
-    const d=h.nextElementSibling; d.classList.toggle("hidden");
-  });
-}
-
-function saveBlock(s,idx){
-  const mini=(k,v)=>`<div class="mini"><div class="k">${k}</div><div class="v">${esc(v??"—")}</div></div>`;
-  const pagesRows = s.pages.length ? s.pages.map(p=>`<tr>
-      <td>${fmtDate(p.date)}</td>
-      <td>${esc(p.page_display)}</td>
-      <td><span class="badge b-${esc(p.grade_kind)}">${esc(p.status_label)}</span></td>
-      <td>${esc(p.errors)}</td>
-      <td>${esc(p.teacher_name)}</td>
-    </tr>`).join("") : `<tr><td colspan="5" class="empty">لا توجد أيام تسميع.</td></tr>`;
-
-  const testsTbl = s.tests.length ? `<div class="tbl-title">الاختبارات</div>
-    <div class="table-wrap"><table><thead><tr>
-      <th>النوع</th><th>التاريخ</th><th>النتيجة</th><th>الأخطاء</th><th>المشرف</th></tr></thead>
-      <tbody>${s.tests.map(t=>`<tr>
-        <td><span class="badge b-exam">${esc(t.type_label)}</span></td>
-        <td>${fmtDate(t.date)}</td>
-        <td><span class="badge b-${esc(t.grade_kind)}">${esc(t.status_label)}</span></td>
-        <td>${esc(t.errors)}</td>
-        <td>${esc(t.teacher_name)}</td></tr>`).join("")}</tbody></table></div>` : "";
-
-  return `<div class="save-block">
-    <div class="save-head">
-      <span class="sname">${esc(s.name)||"حفظ"} ${s.is_current?'<span class="badge b-active" style="font-size:10px">الحالي</span>':''}</span>
-      <span class="badge ${statusBadgeClass(s.status)}">${esc(s.status_label)}</span>
-      <span class="spacer"></span>
-      <span class="sub" style="color:var(--muted);font-size:13px">${s.progress_pct}% · اضغط للتفاصيل ▾</span>
-    </div>
-    <div class="save-detail ${idx===0?'':'hidden'}">
-      <div class="mini-grid">
-        ${mini("المشرف",s.teacher_name)}
-        ${mini("من صفحة",s.start_page)}
-        ${mini("إلى صفحة",s.end_page)}
-        ${mini("الورد اليومي",s.every_day_page)}
-        ${mini("بدأ في",fmtDate(s.started_at))}
-        ${mini("انتهى في",fmtDate(s.finished_at))}
-        ${mini("مشرف الاختبار الجزئي",s.exam1_teacher_name)}
-        ${mini("مشرف الاختبار التراكمي",s.exam2_teacher_name)}
-      </div>
-      <div class="prog"><i style="width:${s.progress_pct}%"></i></div>
-      <div class="tbl-title">أيام التسميع (${s.pages.length})</div>
-      <div class="table-wrap"><table><thead><tr>
-        <th>التاريخ</th><th>الصفحة</th><th>النتيجة</th><th>الأخطاء</th><th>المشرف</th></tr></thead>
-        <tbody>${pagesRows}</tbody></table></div>
-      ${testsTbl}
-    </div>
-  </div>`;
-}
-
-boot();
-</script>
+<script src="./js/api.js"></script>
+<script src="./js/ui.js"></script>
+<script src="./js/app.js"></script>
 </body>
 </html>

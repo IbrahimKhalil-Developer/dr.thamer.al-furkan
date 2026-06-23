@@ -31,8 +31,8 @@ function formatTimeBaghdad(dateStr: string | null): string {
 
 function calcTimeReadyIsEnded(): boolean {
   const baghdad = new Date(new Date().getTime() + 3 * 60 * 60 * 1000);
-  const h = baghdad.getUTCHours(), m = baghdad.getUTCMinutes();
-  return h === 22 || (h === 23 && m <= 45);
+  const minutesNow = baghdad.getUTCHours() * 60 + baghdad.getUTCMinutes();
+  return minutesNow >= 23 * 60 + 25; // ينتهي الوقت من 11:25 مساءً إلى نص الليل
 }
 
 function calcShouldRequest45min(): boolean {

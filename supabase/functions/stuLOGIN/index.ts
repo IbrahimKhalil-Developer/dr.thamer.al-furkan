@@ -53,10 +53,8 @@ function formatTimeBaghdad(dateStr: string | null): string {
 function checkTimeEndedBaghdad(): string {
   const now = new Date();
   const baghdadDate = new Date(now.getTime() + (3 * 60 * 60 * 1000));
-  const hours = baghdadDate.getUTCHours();
-  const minutes = baghdadDate.getUTCMinutes();
-  if (hours === 22 || (hours === 23 && minutes <= 45)) return "yes";
-  return "no";
+  const minutesNow = baghdadDate.getUTCHours() * 60 + baghdadDate.getUTCMinutes();
+  return minutesNow >= 23 * 60 + 25 ? "yes" : "no"; // ينتهي الوقت من 11:25 مساءً إلى نص الليل
 }
 
 function formatDate(dateStr: string | null): string {

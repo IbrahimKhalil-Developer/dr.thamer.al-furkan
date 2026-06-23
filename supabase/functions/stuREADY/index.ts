@@ -17,13 +17,13 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
           }
 
             // ── 1. التحقق من الوقت (توقيت بغداد) ───────────────────────────
-              // المسموح: من 12:00 صباحاً إلى 9:59 مساءً
-                // الممنوع: من 10:00 مساءً (22:00) إلى 11:59 مساءً
+              // المسموح: من 12:00 صباحاً إلى 11:24 مساءً
+                // الممنوع: من 11:25 مساءً (23:25) إلى 11:59 مساءً
                   const nowBaghdad     = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Baghdad" }));
-                    const currentHour    = nowBaghdad.getHours();
-                      
-                        if (currentHour >= 22) {
-                            return errorResponse("لا يمكن الإستعداد في الوقت الحالي، أقصى وقت للإستعداد هو 10:00 مسائًا بتوقيت بغداد.", 403);
+                    const minutesNowReady = nowBaghdad.getHours() * 60 + nowBaghdad.getMinutes();
+
+                        if (minutesNowReady >= 23 * 60 + 25) {
+                            return errorResponse("لا يمكن الإستعداد في الوقت الحالي، أقصى وقت للإستعداد هو 11:25 مسائًا بتوقيت بغداد.", 403);
                               }
 
                                 // ── 2. استخراج التوكن والتحقق من المستخدم ────────────────────────

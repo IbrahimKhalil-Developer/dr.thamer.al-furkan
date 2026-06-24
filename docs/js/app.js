@@ -431,7 +431,7 @@ function pagesTable(rows, isExam) {
   const head = isExam
     ? `<tr><th>النوع</th><th>الصفحات</th><th>الحالة</th><th>الأخطاء</th><th>المشرف</th><th>التاريخ</th><th></th></tr>`
     : `<tr><th>الصفحة</th><th>الاسم</th><th>الحالة</th><th>الأخطاء</th><th>المشرف</th><th>التاريخ</th><th></th></tr>`;
-  const body = rows.map(r => {
+  const body = rows.map((r, idx) => {
     const errors = errorsText(r.errors_number, isExam);
     const cells = isExam
       ? `<td>${UI.esc(r.type_label)}</td><td>${UI.esc(r.start_page)}—${UI.esc(r.end_page)}</td>`
@@ -442,7 +442,7 @@ function pagesTable(rows, isExam) {
       <td class="muted">${errors}</td>
       <td>${UI.esc(r.teacher_name)}</td>
       <td class="muted">${UI.fmtDateShort(r.date || r.created_at)}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="openGradeModal('${tbl}',${r.id},${isExam})">${icon('check', 13)} تقييم</button></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openGradeModal('${tbl}',${r.id},${isExam},${!isExam && idx < rows.length - 2})">${icon('check', 13)} تقييم</button></td>
     </tr>`;
   }).join('');
   return `<div class="tbl-wrap" style="margin-top:14px"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
@@ -591,9 +591,15 @@ function openAddSaveModal() {
 function openEditSaveModal(saveId) {
   const s = APP.current.saves.find(x => String(x.id) === String(saveId)); if (!s) return;
   const tOpts = [['', '—']].concat(teacherOptions());
+  const isTerminated = s.status === 'TERMINATED';
+  const statusField = isTerminated
+    ? `<div class="field"><label>الحالة</label><input class="f-input" data-k="status_display" value="إلغاء الحفظ نهائياً" disabled>
+       <input class="f-input" data-k="status" type="hidden" value="TERMINATED">
+       <p class="muted" style="margin-top:4px;color:var(--danger,#e55)">هذا الحفظ منهي نهائياً ولا يمكن إعادة تفعيله إلا من قبل المطوّر.</p></div>`
+    : selectHtml('الحالة', 'status', s.status, [['ACTIVE', 'نشط'], ['SUSPENDED', 'موقوف مؤقتاً'], ['TERMINATED', 'إلغاء الحفظ نهائياً']]);
   const body = `<div class="form-grid">
     ${fieldHtml('إلى صفحة', 'end_page', s.end_page, 'number')}
-    ${selectHtml('الحالة', 'status', s.status, [['ACTIVE', 'نشط'], ['SUSPENDED', 'موقوف مؤقتاً'], ['TERMINATED', 'إلغاء الحفظ نهائياً']])}
+    ${statusField}
     ${selectHtml('المشرف', 'teacher_id', s.teacher_id, tOpts)}
     ${selectHtml('الإبلاغ', 'notify_target', 'both', NOTIFY_OPTS)}
   </div>
@@ -632,8 +638,11 @@ function openExamControlModal(saveId, type) {
   };
 }
 
-function openGradeModal(table, rowId, isExam) {
-  const body = `<p class="muted" style="margin-bottom:14px">اختر نتيجة التقييم، وسيُرسل إشعار للطالب ومشرفه تلقائياً.</p>
+function openGradeModal(table, rowId, isExam, isOld) {
+  const oldNote = isOld
+    ? `<p class="muted" style="margin-bottom:14px;color:var(--danger,#e55)">صف قديم: يُسمح فقط بتعديل الأخطاء ضمن نطاق النجاح (٠ إلى ٢)، لا يمكن جعله راسباً.</p>`
+    : `<p class="muted" style="margin-bottom:14px">اختر نتيجة التقييم، وسيُرسل إشعار للطالب ومشرفه تلقائياً.</p>`;
+  const body = `${oldNote}
     <div class="form-grid">${fieldHtml('التسويد (0-999)', 'sowad', 0, 'number')}${fieldHtml('النسيان (0-999)', 'nisyan', 0, 'number')}${isExam ? fieldHtml('الفتح (0-999)', 'fateh', 0, 'number') : ''}</div>
     ${textareaHtml('ملاحظة (اختياري)', 'custom_info_text', '', 'ملاحظة تظهر للطالب...')}
     ${selectHtml('الإبلاغ', 'notify_target', 'both', NOTIFY_OPTS)}
@@ -641,15 +650,20 @@ function openGradeModal(table, rowId, isExam) {
   const foot = `<button class="btn btn-primary" id="md-ok">حفظ التقييم</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
   const m = UI.modal(isExam ? 'تقييم اختبار' : 'تقييم حفظ اليوم', body, foot);
   m.el.querySelector('#md-cancel').onclick = m.close;
+  let willReject = false;
   const calc = () => {
     const g = collectFields(m.el); const so = +g.sowad || 0, ni = +g.nisyan || 0, fa = +g.fateh || 0;
     let ps; if (isExam) { const sum = so + ni + fa * 2; ps = sum >= 6 ? 'reject' : sum >= 3 ? 'good' : sum >= 1 ? 'very_good' : 'perfect'; }
     else { const sum = so + ni; ps = sum >= 3 ? 'reject' : sum === 2 ? 'good' : sum === 1 ? 'very_good' : 'perfect'; }
+    willReject = ps === 'reject';
     const lbl = { reject: 'رسوب', good: 'جيد جداً', very_good: 'إمتياز', perfect: 'مُتقِن' }[ps];
-    m.el.querySelector('#g-pv').innerHTML = UI.gradeBadge(ps, lbl);
+    const badge = UI.gradeBadge(ps, lbl);
+    m.el.querySelector('#g-pv').innerHTML = (isOld && willReject)
+      ? badge + ' <span style="color:var(--danger,#e55)">— غير مسموح لصف قديم</span>' : badge;
   };
   m.el.querySelectorAll('.f-input').forEach(i => i.addEventListener('input', calc)); calc();
   m.el.querySelector('#md-ok').onclick = async ev => {
+    if (isOld && willReject) { UI.toast('لا يمكن جعل صف قديم راسباً، عدّل الأخطاء ضمن نطاق النجاح (٠ إلى ٢).', 'err'); return; }
     const g = collectFields(m.el);
     const payload = {
       action: 'grade_page', table, row_id: rowId, state: 'finished',
@@ -942,7 +956,7 @@ async function pageHolidays() {
     <td>${UI.esc(h.for_date)}</td>
     <td>${h.processed ? UI.badge('green', 'مُنفّذة') : UI.badge('gold', 'قادمة')}</td>
     <td class="muted">${UI.fmtDateShort(h.created_at)}</td>
-    <td>${isOwner ? `<button class="icon-btn" onclick="deleteHoliday('${h.id}')">${icon('trash', 14)}</button>` : ''}</td>
+    <td>${isOwner && !h.processed ? `<button class="icon-btn" onclick="deleteHoliday('${h.id}')">${icon('trash', 14)}</button>` : ''}</td>
   </tr>`).join('');
   wrap.innerHTML = `<div class="tbl-wrap"><table>
     <thead><tr><th>الهدف</th><th>النوع</th><th>التاريخ</th><th>الحالة</th><th>أُضيفت</th><th></th></tr></thead>

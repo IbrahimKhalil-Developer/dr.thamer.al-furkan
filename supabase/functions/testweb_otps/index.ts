@@ -67,14 +67,32 @@ function rainbow(): Map<string, string> {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return preflight();
 
-  const { response } = await requireAdmin(req);
+  const { admin, response } = await requireAdmin(req);
   if (response) return response;
 
   try {
     let limit = 50;
+    let body: any = {};
     if (req.method === "POST") {
-      const b = await req.json().catch(() => ({}));
-      if (b?.limit) limit = Math.min(200, Math.max(1, Number(b.limit)));
+      body = await req.json().catch(() => ({}));
+      if (body?.limit) limit = Math.min(200, Math.max(1, Number(body.limit)));
+    }
+
+    // بوابة كلمة المرور (عملية حساسة): التحقق قبل عرض رموز الدخول
+    const submittedPw = typeof body?.admin_password === "string" ? body.admin_password : "";
+    if (!submittedPw) {
+      return jsonResponse({
+        error: true,
+        code: "PWNEEDED",
+        errors: "يجب إدخال كلمة المرور لعرض رموز الدخول.",
+      }, 401);
+    }
+    if (String(admin?.password ?? "") !== submittedPw) {
+      return jsonResponse({
+        error: true,
+        code: "PWWRONG",
+        errors: "كلمة المرور غير صحيحة.",
+      }, 401);
     }
 
     const { data: otps, error } = await supabaseAdmin

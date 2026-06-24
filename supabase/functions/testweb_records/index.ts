@@ -18,6 +18,26 @@ function rangeDisp(row: any): string {
   return "-";
 }
 
+function reviewKind(takeemStatus: any): "reject" | "good" | "very_good" | "perfect" | "" {
+  switch (takeemStatus) {
+    case "reject":    return "reject";
+    case "good":      return "good";
+    case "very_good": return "very_good";
+    case "perfect":   return "perfect";
+    default:          return "";
+  }
+}
+
+function reviewLabel(takeemStatus: any, isFU: boolean): string {
+  switch (takeemStatus) {
+    case "reject":    return "رسوب";
+    case "good":      return "جيد جداً";
+    case "very_good": return "إمتياز";
+    case "perfect":   return isFU ? "مُتقِنة" : "مُتقِن";
+    default:          return "—";
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return preflight();
   if (req.method !== "POST") return jsonResponse({ error: true, errors: "الطريقة غير مسموح بها" }, 405);
@@ -55,11 +75,15 @@ Deno.serve(async (req: Request) => {
         grade_kind: gradeKind(row.status ?? "", row.page_status ?? ""),
         sowad: errCols(row).sowad, nisyan: errCols(row).nisyan,
         fateh: isExam ? errCols(row).fateh : "-",
+        takeem: row.takeem ?? null,
+        review_kind: reviewKind(row.takeem_status),
+        review_label: reviewLabel(row.takeem_status, isFU),
       };
     }
 
     if (action === "today") {
-      const today = baghdadDate(0);
+      const reqDate = String(body?.date ?? "").trim();
+      const today = /^\d{4}-\d{2}-\d{2}$/.test(reqDate) ? reqDate : baghdadDate(0);
       const [{ data: pages }, { data: tests }] = await Promise.all([
         supabaseAdmin.from("users_pages").select("*").eq("date", today),
         supabaseAdmin.from("users_pages_tests").select("*").eq("date", today),

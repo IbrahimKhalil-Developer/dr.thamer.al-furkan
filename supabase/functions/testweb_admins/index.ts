@@ -1,6 +1,7 @@
 import {
   supabaseAdmin, requireAdmin, requireOwner, SYSTEM_KEY,
   jsonResponse, preflight, writeLog, toLocalPhone, normalizePhone,
+  g, sendWaha, wrapMsg,
 } from "../_shared/guard.ts";
 
 function adminPublic(a: any, selfId: string) {
@@ -61,7 +62,7 @@ Deno.serve(async (req: Request) => {
 
       const patch: Record<string, any> = {};
       if (f.name != null) patch.name = String(f.name).trim();
-      if (f.phone != null) patch.phone_number = normalizePhone(String(f.phone));
+      // رقم الهاتف لا يُعدّل أبداً — نتجاهل أي phone/phone_number وارد
       if (f.gender != null) patch.gender = f.gender === "female" ? "female" : "male";
       if (f.type != null) patch.type = f.type === "owner" ? "owner" : "admin";
       if (f.password) patch.password = String(f.password);
@@ -91,8 +92,22 @@ Deno.serve(async (req: Request) => {
       const { data: target } = await supabaseAdmin.from("admins").select("*").eq("id", id).maybeSingle();
       if (!target) return jsonResponse({ error: true, errors: "الحساب غير موجود" }, 404);
 
+      // لا يمكن إيقاف/تفعيل حساب بصلاحية مسؤول إداري (نظير في الرتبة)
+      if (target.type === "owner") {
+        return jsonResponse({ error: true, errors: "لا يمكن إيقاف أو تفعيل حساب بصلاحية مسؤول إداري." }, 403);
+      }
+
       const newActive = target.active !== true;
       await supabaseAdmin.from("admins").update({ active: newActive }).eq("id", id);
+
+      // إشعار واتساب — أفضل جهد، لا يفشل العملية
+      const acc = g(target.gender, "حسابكَ", "حسابكِ");
+      const msg = newActive
+        ? `تمت إعادة تفعيل ${acc} في لوحة التحكم لقاعدة بيانات طلاب تحفيظ من قبل إدارة مركز مشروع التحفيظ.`
+        : `تم إلغاء تفعيل ${acc} في لوحة التحكم لقاعدة بيانات طلاب تحفيظ من قبل إدارة مركز مشروع التحفيظ.`;
+      try {
+        await sendWaha(target.phone_number ?? "", wrapMsg(target, msg));
+      } catch (_e) { /* تجاهل */ }
 
       await writeLog(A, `${newActive ? "أعاد تفعيل" : "ألغى تفعيل"} حساب إداري (${target.name}).`);
       return jsonResponse({ error: false, active: newActive });

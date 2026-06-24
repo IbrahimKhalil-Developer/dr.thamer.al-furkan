@@ -108,8 +108,46 @@ Deno.serve(async (req: Request) => {
       total_saves: saves.length,
     };
 
+    // top_success: strongest results per student (finished pages with page_status perfect or very_good)
+    const successByUser = new Map<string, number>();
+    for (const s of students) {
+      const saveId = s.save?.id;
+      if (!saveId) continue;
+      const savePages = pagesBySave.get(String(saveId)) ?? [];
+      let cnt = 0;
+      for (const p of savePages) {
+        if (p.status === "finished" && (p.page_status === "perfect" || p.page_status === "very_good")) cnt++;
+      }
+      if (cnt > 0) successByUser.set(String(s.user_id), cnt);
+    }
+
+    let topSuccess = students
+      .filter((s: any) => (successByUser.get(String(s.user_id)) ?? 0) > 0)
+      .map((s: any) => ({
+        user_id: s.user_id, name: s.full_name, gender: s.gender,
+        value: successByUser.get(String(s.user_id)) ?? 0, max: 0,
+      }))
+      .sort((a: any, b: any) => b.value - a.value)
+      .slice(0, 8);
+    const successMax = topSuccess.length ? Math.max(...topSuccess.map((i: any) => i.value)) : 0;
+    const topSuccessMaxVal = successMax > 0 ? successMax : 1;
+    topSuccess = topSuccess.map((i: any) => ({ ...i, max: topSuccessMaxVal }));
+
+    // top_absence: students with highest absence totals
+    let topAbsence = students
+      .filter((s: any) => s.absence_total > 0)
+      .map((s: any) => ({
+        user_id: s.user_id, name: s.full_name, gender: s.gender,
+        value: s.absence_total, max: 0,
+      }))
+      .sort((a: any, b: any) => b.value - a.value)
+      .slice(0, 8);
+    const absenceMax = topAbsence.length ? Math.max(...topAbsence.map((i: any) => i.value)) : 0;
+    const topAbsenceMaxVal = absenceMax > 0 ? absenceMax : 1;
+    topAbsence = topAbsence.map((i: any) => ({ ...i, max: topAbsenceMaxVal }));
+
     const me = { name: admin!.name, type: admin!.type, gender: (admin as any).gender === "female" ? "female" : "male" };
-    return jsonResponse({ error: false, me, stats, students, teachers: teachersOut });
+    return jsonResponse({ error: false, me, stats, students, teachers: teachersOut, top_success: topSuccess, top_absence: topAbsence });
   } catch (e) {
     return jsonResponse({ error: true, errors: String(e) }, 500);
   }

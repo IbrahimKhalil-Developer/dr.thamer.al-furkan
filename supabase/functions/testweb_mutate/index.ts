@@ -1,7 +1,26 @@
 import {
   supabaseAdmin, requireAdmin, SYSTEM_KEY, jsonResponse, preflight,
-  sendWaha, wrapMsg, writeLog, g, toLocalPhone, normalizePhone, nowIso,
+  sendWaha, wrapMsg, writeLog, g, toLocalPhone, normalizePhone, nowIso, baghdadDate,
 } from "../_shared/guard.ts";
+
+/* ── مساعد إشعارات: يحدد لمن تُرسل رسائل الواتساب ──────────────────────
+   notify_target ∈ "student" | "teacher" | "both" | "none" (افتراضي "both").
+   توافق خلفي: إن مُرّر notify===false اعتبره "none". */
+type NotifyTarget = "student" | "teacher" | "both" | "none";
+function resolveNotifyTarget(body: any): NotifyTarget {
+  if (body?.notify === false) return "none";
+  const nt = String(body?.notify_target ?? "both");
+  if (nt === "student" || nt === "teacher" || nt === "both" || nt === "none") return nt;
+  return "both";
+}
+function notifyStudent(nt: NotifyTarget): boolean { return nt === "student" || nt === "both"; }
+function notifyTeacher(nt: NotifyTarget): boolean { return nt === "teacher" || nt === "both"; }
+
+// بناء سلسلة عرض الصفحات بالعربية مثل "50 و 51 و 52" (مطابق لـ pages_system)
+function buildPageDisplay(page: number, edp: number): string {
+  const count = edp < 1 ? 1 : Math.ceil(edp);
+  return Array.from({ length: count }, (_, i) => String(page - (count - 1 - i))).join(" و ");
+}
 
 function randomPassword(): string {
   const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ", lower = "abcdefghijkmnpqrstuvwxyz";
@@ -80,18 +99,74 @@ Deno.serve(async (req: Request) => {
     /* ── طلب من الطالب إكمال ملفه ───────────────────────────────── */
     if (action === "set_profile_incomplete") {
       const userId = String(body?.user_id ?? "");
+      const reason = body?.reason != null ? String(body.reason) : "";
       if (!userId) return jsonResponse({ error: true, errors: "user_id مطلوب" }, 400);
       const { data: u } = await supabaseAdmin.from("users")
         .select("full_name, gender, user_phone_number").eq("user_id", userId).maybeSingle();
       const { error } = await supabaseAdmin.from("users").update({ profile_incomplete: true }).eq("user_id", userId);
       if (error) return jsonResponse({ error: true, errors: error.message }, 400);
-      const isFU = u?.gender === "female";
       let notified = false;
       if (u?.user_phone_number) {
-        const txt = `${g(u.gender, "عزيزي الطالب", "عزيزتي الطالبة")}،\nيُرجى ${g(u.gender, "تحديثك", "تحديثكِ")} لمعلومات ملفك الشخصي في تطبيق تحفيظ، فبعض البيانات غير مكتملة.`;
+        const txt = `تم تحويل ${g(u.gender, "ملفكَ", "ملفكِ")} الشخصي إلى غير مكتمل، يرجى ${g(u.gender, "منكَ", "منكِ")} الدخول إلى تطبيق تحفيظ وملء المعلومات مرة أُخرى.\nالسبب: ${reason.trim() ? reason.trim() : "لا يوجد"}`;
         notified = await sendWaha(u.user_phone_number, wrapMsg(A, txt));
       }
-      await writeLog(A, `طلب من الطالب (${u?.full_name ?? userId}) إكمال ملفه الشخصي.`);
+      await writeLog(A, `طلب من الطالب (${u?.full_name ?? userId}) إكمال ملفه الشخصي.${reason.trim() ? ` السبب: ${reason.trim()}.` : ""}`);
+      return jsonResponse({ error: false, notified });
+    }
+
+    /* ── تصفير غيابات الطالب ───────────────────────────────────────── */
+    if (action === "clear_absence") {
+      const userId = String(body?.user_id ?? "");
+      if (!userId) return jsonResponse({ error: true, errors: "user_id مطلوب" }, 400);
+      const { data: u } = await supabaseAdmin.from("users")
+        .select("full_name, gender").eq("user_id", userId).maybeSingle();
+      if (!u) return jsonResponse({ error: true, errors: "الطالب غير موجود" }, 404);
+      const { error } = await supabaseAdmin.from("users")
+        .update({ absence: { total: 0, last_check: 0, last_stopped_at: 0, stopped_abs_total: 0 } })
+        .eq("user_id", userId);
+      if (error) return jsonResponse({ error: true, errors: error.message }, 400);
+      await writeLog(A, `صفّر غيابات ${g(u.gender, "الطالب", "الطالبة")} (${u.full_name ?? userId}).`);
+      return jsonResponse({ error: false });
+    }
+
+    /* ── إرسال كلمة السر عبر واتساب (يتطلب كلمة مرور الإداري) ───────── */
+    if (action === "send_password") {
+      const kind = String(body?.kind ?? "student");
+      const id = String(body?.id ?? "");
+      const adminPassword = String(body?.admin_password ?? "");
+      if (!id) return jsonResponse({ error: true, errors: "id مطلوب" }, 400);
+      if (String(A.password) !== String(adminPassword)) {
+        return jsonResponse({ error: true, errors: "كلمة المرور غير صحيحة." }, 401);
+      }
+
+      let password = "", phone = "", targetGender = "male", who = "";
+      if (kind === "teacher") {
+        const { data: t } = await supabaseAdmin.from("teachers")
+          .select("full_name, gender, password, phone_number").eq("teacher_id", id).maybeSingle();
+        if (!t) return jsonResponse({ error: true, errors: "المشرف غير موجود" }, 404);
+        password = String(t.password ?? ""); phone = String(t.phone_number ?? "");
+        targetGender = t.gender ?? "male"; who = t.full_name ?? "";
+      } else if (kind === "admin") {
+        const { data: ad } = await supabaseAdmin.from("admins")
+          .select("name, gender, password, phone_number").eq("id", id).maybeSingle();
+        if (!ad) return jsonResponse({ error: true, errors: "الحساب الإداري غير موجود" }, 404);
+        password = String(ad.password ?? ""); phone = String(ad.phone_number ?? "");
+        targetGender = ad.gender ?? "male"; who = ad.name ?? "";
+      } else {
+        const { data: u } = await supabaseAdmin.from("users")
+          .select("full_name, gender, password, user_phone_number").eq("user_id", id).maybeSingle();
+        if (!u) return jsonResponse({ error: true, errors: "الطالب غير موجود" }, 404);
+        password = String(u.password ?? ""); phone = String(u.user_phone_number ?? "");
+        targetGender = u.gender ?? "male"; who = u.full_name ?? "";
+      }
+
+      let notified = false;
+      if (phone && password) {
+        const txt = `كلمة السر الخاصة ${g(targetGender, "بحسابكَ", "بحسابكِ")} هي: ${password}`;
+        notified = await sendWaha(phone, wrapMsg(A, txt));
+      }
+      const kindLbl = kind === "teacher" ? "مشرف" : kind === "admin" ? "إداري" : "طالب";
+      await writeLog(A, `أرسل كلمة سر (${kindLbl}) (${who}) عبر واتساب.`);
       return jsonResponse({ error: false, notified });
     }
 
@@ -101,13 +176,15 @@ Deno.serve(async (req: Request) => {
       const f = body?.fields ?? {};
       if (!saveId) return jsonResponse({ error: true, errors: "save_id مطلوب" }, 400);
 
+      const notifyTarget = resolveNotifyTarget(body);
+
       const { data: save } = await supabaseAdmin.from("users_saves").select("*").eq("id", saveId).maybeSingle();
       if (!save) return jsonResponse({ error: true, errors: "الحفظ غير موجود" }, 404);
-      if (save.status === "TERMINATED") return jsonResponse({ error: true, errors: "لا يمكن تعديل حفظ منهي" }, 400);
 
       const { data: stu } = await supabaseAdmin.from("users")
         .select("full_name, gender, user_phone_number").eq("user_id", save.user_id).maybeSingle();
       const isFU = stu?.gender === "female";
+      const sg = stu?.gender;
       const patch: Record<string, any> = {};
       const notes: string[] = [];
 
@@ -117,20 +194,64 @@ Deno.serve(async (req: Request) => {
         if (ep > Number(save.start_page)) { patch.end_page = ep; notes.push(`إلى الصفحة ${ep}`); }
       }
 
-      // الحالة: ACTIVE ↔ SUSPENDED فقط
+      // ── تغيير حالة الحفظ: ثلاث حالات + رسائل كاملة ──────────────────
+      // الانتقالات المسموحة: ACTIVE↔SUSPENDED، ACTIVE→TERMINATED، SUSPENDED→TERMINATED
       if (f.status && f.status !== save.status) {
-        if (!["ACTIVE", "SUSPENDED"].includes(f.status) || !["ACTIVE", "SUSPENDED"].includes(save.status)) {
-          return jsonResponse({ error: true, errors: "لا يمكن تغيير الحالة إلا بين (نشط) و(موقوف مؤقتاً)" }, 400);
+        // حفظ منهي نهائياً: لا يُسمح بأي تغيير
+        if (save.status === "TERMINATED") {
+          return jsonResponse({ error: true, errors: "هذا الحفظ منهي نهائياً، لا يمكن إعادة تفعيله. يمكن للمطور فقط إعادة تفعيله." }, 400);
         }
-        patch.status = f.status;
-        if (f.status === "ACTIVE") { patch.status_reason = null; patch.old_status = null; }
-        if (stu?.user_phone_number) {
-          const txt = f.status === "SUSPENDED"
-            ? `تم إيقاف ${g(stu.gender, "حفظكَ", "حفظكِ")} (*${save.name}*) مؤقتاً من قبل الإدارة.`
-            : `تمت إعادة تفعيل ${g(stu.gender, "حفظكَ", "حفظكِ")} (*${save.name}*) من جديد.`;
-          await sendWaha(stu.user_phone_number, wrapMsg(A, txt));
+        const allowed =
+          (save.status === "ACTIVE" && f.status === "SUSPENDED") ||
+          (save.status === "SUSPENDED" && f.status === "ACTIVE") ||
+          (save.status === "ACTIVE" && f.status === "TERMINATED") ||
+          (save.status === "SUSPENDED" && f.status === "TERMINATED");
+        if (!allowed) {
+          return jsonResponse({ error: true, errors: "انتقال حالة غير مسموح به" }, 400);
         }
-        notes.push(f.status === "SUSPENDED" ? "إيقاف مؤقت" : "إعادة تفعيل");
+
+        const reason = f.status_reason != null ? String(f.status_reason).trim() : "";
+        // جلب بيانات المشرف الحالي للرسائل
+        const { data: tch } = save.teacher_id
+          ? await supabaseAdmin.from("teachers").select("full_name, gender, phone_number").eq("teacher_id", save.teacher_id).maybeSingle()
+          : { data: null as any };
+        const tg = tch?.gender;
+        const teacher_name = tch?.full_name ?? save.teacher_name ?? "—";
+
+        let stuMsg = "", tchMsg = "";
+
+        if (f.status === "SUSPENDED") {
+          patch.status = "SUSPENDED";
+          patch.status_reason = reason || null;
+          patch.old_status = save.status;
+          stuMsg = `تم إيقاف ${g(sg, "حفظكَ", "حفظكِ")} (*${save.name}*) بشكل مؤقت.\nالسبب: ${reason || "لا يوجد"}`;
+          tchMsg = `تم إيقاف حفظ ${g(sg, "الطالب", "الطالبة")} *${stu?.full_name ?? ""}* (*${save.name}*) مؤقتاً من قبل الإدارة.\nالسبب: ${reason || "لا يوجد"}`;
+          notes.push("إيقاف مؤقت");
+        } else if (f.status === "ACTIVE") {
+          patch.status = "ACTIVE";
+          patch.status_reason = null;
+          patch.old_status = null;
+          // الحفظ المطلوب لليوم من آخر صف
+          const { data: lastRow } = await supabaseAdmin.from("users_pages")
+            .select("MePageArabic").eq("save_id", saveId).order("id", { ascending: false }).limit(1).maybeSingle();
+          const mePage = lastRow?.MePageArabic;
+          stuMsg = `تمت إعادة تفعيل ${g(sg, "حفظكَ", "حفظكِ")} (*${save.name}*).\nالحفظ المطلوب لليوم: *ص${mePage || "—"}*\nعند ${g(tg, "المشرف", "المشرفة")}: *${teacher_name}*`;
+          tchMsg = `تمت إعادة تفعيل حفظ ${g(sg, "الطالب", "الطالبة")} *${stu?.full_name ?? ""}* (*${save.name}*).\nحفظ${g(sg, "ه", "ها")} لليوم: *ص${mePage || "—"}*\nسيتم إعلامك عند ${g(sg, "استعداده", "استعدادها")}.`;
+          notes.push("إعادة تفعيل");
+        } else { // TERMINATED
+          patch.status = "TERMINATED";
+          patch.status_reason = reason || null;
+          stuMsg = `تم إنهاء ${g(sg, "حفظكَ", "حفظكِ")} الحالي (*${save.name}*).\nالسبب: ${reason || "لا يوجد"}\nإن كان هذا عن طريق الخطأ يُرجى التواصل مع إدارة المركز.`;
+          tchMsg = `تم إنهاء حفظ ${g(sg, "الطالب", "الطالبة")} *${stu?.full_name ?? ""}* (*${save.name}*) من قبل الإدارة.\nالسبب: ${reason || "لا يوجد"}\nإن كان هذا عن طريق الخطأ يُرجى التواصل مع إدارة المركز.`;
+          notes.push("إنهاء نهائي");
+        }
+
+        if (notifyStudent(notifyTarget) && stu?.user_phone_number) {
+          await sendWaha(stu.user_phone_number, wrapMsg(A, stuMsg));
+        }
+        if (notifyTeacher(notifyTarget) && tch?.phone_number) {
+          await sendWaha(tch.phone_number, wrapMsg(A, tchMsg));
+        }
       }
 
       // تبديل المشرف المسؤول
@@ -368,6 +489,7 @@ Deno.serve(async (req: Request) => {
     if (action === "add_save") {
       const userId = String(body?.user_id ?? "");
       const f = body?.fields ?? {};
+      const notifyTarget = resolveNotifyTarget(body);
       const replaceSaveId = body?.replace_save_id ? String(body.replace_save_id) : null;
       const saveName = String(f.save_name ?? "").trim();
       const teacherId = String(f.teacher_id ?? "");
@@ -377,12 +499,20 @@ Deno.serve(async (req: Request) => {
       }
       if (endPage <= startPage) return jsonResponse({ error: true, errors: "صفحة النهاية يجب أن تكون أكبر من البداية" }, 400);
 
+      // حقول إضافية
+      const evaluateToday = String(f.evaluate_today ?? "false") === "true";
+      const exam1 = String(f.exam1 ?? "false") === "true";
+      const exam2 = String(f.exam2 ?? "false") === "true";
+      const exam1TeacherId = exam1 && f.exam1_teacher_id ? String(f.exam1_teacher_id) : null;
+      const exam2TeacherId = exam2 && f.exam2_teacher_id ? String(f.exam2_teacher_id) : null;
+
       const [{ data: stu }, { data: teacher }] = await Promise.all([
         supabaseAdmin.from("users").select("full_name, gender, user_phone_number").eq("user_id", userId).maybeSingle(),
-        supabaseAdmin.from("teachers").select("teacher_id, full_name, gender, phone_number").eq("teacher_id", teacherId).maybeSingle(),
+        supabaseAdmin.from("teachers").select("teacher_id, full_name, gender, phone_number, photo_url").eq("teacher_id", teacherId).maybeSingle(),
       ]);
       if (!stu) return jsonResponse({ error: true, errors: "الطالب غير موجود" }, 404);
       if (!teacher) return jsonResponse({ error: true, errors: "المشرف غير موجود" }, 404);
+      const sg = stu.gender, tg = teacher.gender;
 
       if (replaceSaveId) {
         await supabaseAdmin.from("users_saves").update({ status: "TERMINATED" }).eq("id", replaceSaveId);
@@ -392,23 +522,53 @@ Deno.serve(async (req: Request) => {
       const { data: saveRow, error: saveErr } = await supabaseAdmin.from("users_saves").insert({
         user_id: userId, teacher_id: teacher.teacher_id, name: saveName, number: 1,
         start_page: startPage, end_page: endPage, page_current: startPage, every_day_page: everyDay,
-        created_at: ts, finished_at: null, status: "ACTIVE", exam1: false, exam2: false,
+        created_at: ts, finished_at: null, status: "ACTIVE",
+        exam1, exam2, exam1_teacher_id: exam1TeacherId, exam2_teacher_id: exam2TeacherId,
         teacher_name: teacher.full_name, started_at: ts, db_created_at: ts,
       }).select("id").single();
       if (saveErr || !saveRow) return jsonResponse({ error: true, errors: saveErr?.message ?? "فشل إضافة الحفظ" }, 400);
 
       await supabaseAdmin.from("users").update({ teacher_id: teacher.teacher_id, save_id: saveRow.id }).eq("user_id", userId);
 
-      const isFU = stu.gender === "female";
-      if (stu.user_phone_number) {
-        const txt = `📖 *حفظ جديد*\n${replaceSaveId ? `تم إنهاء حفظك السابق وبدء ` : `تم تسجيل `}حفظ جديد ${g(stu.gender, "لكَ", "لكِ")}: *${saveName}*\nالمشرف${g(teacher.gender, "", "ة")} المسؤول${g(teacher.gender, "", "ة")}: *${teacher.full_name}*`;
-        await sendWaha(stu.user_phone_number, wrapMsg(A, txt));
+      // ── التقييم اليوم: إنشاء صف users_pages أول (مطابق لـ pages_system) ──
+      let pageDisp = "";
+      if (evaluateToday) {
+        const edp = everyDay < 1 ? 1 : Math.ceil(everyDay);
+        const firstPageNum = startPage + edp - 1;
+        pageDisp = buildPageDisplay(firstPageNum, everyDay);
+        await supabaseAdmin.from("users_pages").insert([{
+          user_id: userId, save_id: saveRow.id,
+          teacher_id: teacher.teacher_id, teacher_name: teacher.full_name, teacher_photo: teacher.photo_url ?? "",
+          status: "not_ready", page_status: "not_ready",
+          errors_number: { sowad: 0, nisyan: 0 },
+          created_at: ts,
+          page: firstPageNum, MePageArabic: pageDisp,
+          date: baghdadDate(0),
+        }]);
       }
-      if (teacher.phone_number) {
-        const txt = `تم تكليفك بمتابعة حفظ جديد ${g(stu.gender, "للطالب", "للطالبة")} *${stu.full_name}* (${saveName}).`;
-        await sendWaha(teacher.phone_number, wrapMsg(A, txt));
+
+      // ── رسالة الطالب ──────────────────────────────────────────────
+      let stuMsg: string;
+      if (evaluateToday) {
+        stuMsg = `📖 حفظ اليوم\nالحفظ المطلوب: *${pageDisp}*\nعند ${g(tg, "المشرف", "المشرفة")}: *${teacher.full_name}*\n\nتم تسجيل حفظ جديد ${g(sg, "لكَ", "لكِ")}: *${saveName}*`;
+      } else {
+        stuMsg = `📖 حفظ جديد\nتم تسجيل حفظ جديد ${g(sg, "لكَ", "لكِ")}: *${saveName}*\nيبدأ التسميع اعتباراً من الغد إن شاء الله.\n${g(tg, "المشرف", "المشرفة")}: *${teacher.full_name}*`;
       }
-      await writeLog(A, `أضاف حفظ جديد (${saveName}) ${isFU ? "للطالبة" : "للطالب"} (${stu.full_name}).`);
+      if (replaceSaveId) {
+        stuMsg += `\nنشكر ${g(sg, "لكَ", "لكِ")} إتمام حفظك السابق، وقد تم إنهاؤه نهائياً.`;
+      }
+
+      // ── رسالة المشرف ──────────────────────────────────────────────
+      let tchMsg = `تم تكليفك بمتابعة حفظ جديد ${g(sg, "للطالب", "للطالبة")} *${stu.full_name}* (*${saveName}*).`;
+      if (evaluateToday) tchMsg += `\nالحفظ المطلوب اليوم: *${pageDisp}*`;
+
+      if (notifyStudent(notifyTarget) && stu.user_phone_number) {
+        await sendWaha(stu.user_phone_number, wrapMsg(A, stuMsg));
+      }
+      if (notifyTeacher(notifyTarget) && teacher.phone_number) {
+        await sendWaha(teacher.phone_number, wrapMsg(A, tchMsg));
+      }
+      await writeLog(A, `أضاف حفظ جديد (${saveName}) ${g(sg, "للطالب", "للطالبة")} (${stu.full_name}).${evaluateToday ? " مع تقييم اليوم." : ""}`);
       return jsonResponse({ error: false, save_id: saveRow.id });
     }
 

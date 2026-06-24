@@ -3,6 +3,53 @@ import {
   genderLabel, saveStatusLabel, rowStatusLabel, gradeKind, examTypeLabel, calcProgress, pageDisp,
 } from "../_shared/guard.ts";
 
+function fmtAbsenceDate(v: any): string {
+  try {
+    if (v === null || v === undefined || v === 0 || v === "") return "—";
+    if (typeof v === "number") {
+      if (!isFinite(v) || v <= 0) return "—";
+      let ms: number;
+      if (v > 1e12) ms = v;            // epoch milliseconds
+      else if (v > 1e9) ms = v * 1000; // epoch seconds
+      else return "—";
+      const d = new Date(ms + 3 * 60 * 60 * 1000); // Baghdad offset +3h
+      if (isNaN(d.getTime())) return "—";
+      return d.toISOString().slice(0, 10); // YYYY-MM-DD
+    }
+    if (typeof v === "string") {
+      const t = v.trim();
+      return t.length ? t : "—";
+    }
+    return "—";
+  } catch (_e) {
+    return "—";
+  }
+}
+
+function buildAbsenceInfo(absence: any): [string, string][] {
+  let total = 0, last_check: any = 0, last_stopped_at: any = 0, stopped_abs_total = 0;
+  try {
+    if (absence === null || absence === undefined) {
+      // defaults
+    } else if (typeof absence === "number") {
+      total = absence;
+    } else if (typeof absence === "object") {
+      total = Number(absence.total ?? 0) || 0;
+      last_check = absence.last_check ?? 0;
+      last_stopped_at = absence.last_stopped_at ?? 0;
+      stopped_abs_total = Number(absence.stopped_abs_total ?? 0) || 0;
+    }
+  } catch (_e) {
+    // keep defaults
+  }
+  return [
+    ["إجمالي الغيابات", String(total)],
+    ["آخر تدقيق للغياب", fmtAbsenceDate(last_check)],
+    ["آخر توقف بسبب الغياب", fmtAbsenceDate(last_stopped_at)],
+    ["عدد الغيابات عند آخر توقف", String(stopped_abs_total)],
+  ];
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return preflight();
 
@@ -57,7 +104,7 @@ Deno.serve(async (req: Request) => {
       gender: u.gender ?? "", gender_label: genderLabel(u.gender ?? ""),
       phone: toLocalPhone(u.user_phone_number ?? ""),
       father_phone: toLocalPhone(u.father_phone_number ?? ""),
-      email: u.email ?? "", password: u.password ?? "",
+      email: u.email ?? "",
       date_of_brith: u.date_of_brith ?? "—",
       location: u.user_location ?? "—", gps: u.auto_user_location ?? "—",
       photo_url: photoUrl,
@@ -65,6 +112,7 @@ Deno.serve(async (req: Request) => {
       last_logined_in: u.last_logined_in ?? null, last_opened_in: u.last_opened_in ?? null,
       profile_incomplete: u.profile_incomplete === true,
       absence_total: (typeof u.absence === "number") ? u.absence : Number(u.absence?.total ?? 0),
+      absence_info: buildAbsenceInfo(u.absence),
       teacher_id: u.teacher_id ?? "", teacher_name: teacherName.get(String(u.teacher_id)) ?? "—",
       save_id: u.save_id ?? null,
       added_admin: u.added_admin_phone_number ?? "",

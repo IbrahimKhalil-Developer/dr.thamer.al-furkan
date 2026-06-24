@@ -1,11 +1,15 @@
-import { supabaseAdmin, requireAdmin, jsonResponse, preflight } from "../_shared/guard.ts";
+import { supabaseAdmin, requireAdmin, requireOwner, jsonResponse, preflight } from "../_shared/guard.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return preflight();
   if (req.method !== "POST") return jsonResponse({ error: true, errors: "الطريقة غير مسموح بها" }, 405);
 
-  const { response } = await requireAdmin(req);
+  const { admin, response } = await requireAdmin(req);
   if (response) return response;
+
+  // سجل العمليات: يُعرض فقط لمسؤول إداري (owner)، يُمنع عن باقي الإداريين حتى عبر api
+  const ownerErr = requireOwner(admin!);
+  if (ownerErr) return ownerErr;
 
   try {
     const body = await req.json().catch(() => ({}));

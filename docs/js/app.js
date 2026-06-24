@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   { id: 'messages', label: 'الرسائل', ic: 'message' },
   { id: 'otps', label: 'رموز الدخول', ic: 'key' },
   { id: 'holidays', label: 'الإجازات', ic: 'holiday' },
-  { id: 'logs', label: 'سجل العمليات', ic: 'logs' },
+  { id: 'logs', label: 'سجل العمليات', ic: 'logs', ownerOnly: true },
   { id: 'admins', label: 'الإداريون', ic: 'admins', ownerOnly: true },
 ];
 
@@ -111,6 +111,7 @@ async function router() {
   setActiveNav(page);
 
   if (page === 'admins' && APP.admin.type !== 'owner') { location.hash = '#/overview'; return; }
+  if (page === 'logs' && APP.admin.type !== 'owner') { location.hash = '#/overview'; return; }
 
   if (DASH_PAGES.has(page) && !APP.dash) {
     view().innerHTML = `<div class="empty-state"><span class="spinner lg"></span></div>`;
@@ -939,9 +940,8 @@ function renderOtps(otps) {
 
 /* ================= الإجازات ================= */
 async function pageHolidays() {
-  const isOwner = APP.admin.type === 'owner';
   view().innerHTML = `<div class="panel">
-    <div class="panel-head"><h2>الإجازات</h2>${isOwner ? `<button class="btn btn-primary btn-sm" onclick="openAddHolidayModal()">${icon('plus', 14)} إضافة إجازة</button>` : ''}</div>
+    <div class="panel-head"><h2>الإجازات</h2><button class="btn btn-primary btn-sm" onclick="openAddHolidayModal()">${icon('plus', 14)} إضافة إجازة</button></div>
     <div id="hol-wrap"><span class="spinner"></span></div>
   </div>`;
   let res;
@@ -956,7 +956,7 @@ async function pageHolidays() {
     <td>${UI.esc(h.for_date)}</td>
     <td>${h.processed ? UI.badge('green', 'مُنفّذة') : UI.badge('gold', 'قادمة')}</td>
     <td class="muted">${UI.fmtDateShort(h.created_at)}</td>
-    <td>${isOwner && !h.processed ? `<button class="icon-btn" onclick="deleteHoliday('${h.id}')">${icon('trash', 14)}</button>` : ''}</td>
+    <td>${!h.processed ? `<button class="icon-btn" onclick="deleteHoliday('${h.id}')">${icon('trash', 14)}</button>` : ''}</td>
   </tr>`).join('');
   wrap.innerHTML = `<div class="tbl-wrap"><table>
     <thead><tr><th>الهدف</th><th>النوع</th><th>التاريخ</th><th>الحالة</th><th>أُضيفت</th><th></th></tr></thead>

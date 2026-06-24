@@ -1,5 +1,5 @@
 import {
-  supabaseAdmin, requireAdmin, requireOwner, jsonResponse, preflight,
+  supabaseAdmin, requireAdmin, jsonResponse, preflight,
   sendWaha, wrapMsg, writeLog, g, baghdadDate, nowIso,
 } from "../_shared/guard.ts";
 
@@ -42,7 +42,6 @@ Deno.serve(async (req: Request) => {
 
     /* ── إضافة إجازة (للجميع / لطالب / لمشرف) ─────────────────────── */
     if (action === "add") {
-      const r = requireOwner(A); if (r) return r;
       const type = String(body?.type ?? "");
       const forDate = String(body?.for_date ?? "");
       const forUserId = body?.for_user_id ? String(body.for_user_id) : null;
@@ -126,7 +125,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "delete") {
-      const r = requireOwner(A); if (r) return r;
       const id = String(body?.id ?? "");
       if (!id) return jsonResponse({ error: true, errors: "id مطلوب" }, 400);
       const { data: h } = await supabaseAdmin.from("holidays").select("processed").eq("id", id).maybeSingle();

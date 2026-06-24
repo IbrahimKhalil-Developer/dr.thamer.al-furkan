@@ -68,7 +68,7 @@ Deno.serve(async (req: Request) => {
       if (!id) return jsonResponse({ error: true, errors: "id مطلوب" }, 400);
       if (String(id) === String(A.id)) return jsonResponse({ error: true, errors: "لا يمكنك تعديل حسابك الخاص من هنا" }, 400);
 
-      const { data: target } = await supabaseAdmin.from("admins").select("email, type").eq("id", id).maybeSingle();
+      const { data: target } = await supabaseAdmin.from("admins").select("name, email, type, gender").eq("id", id).maybeSingle();
       if (!target) return jsonResponse({ error: true, errors: "الحساب غير موجود" }, 404);
 
       // يوجد مسؤول إداري (owner) واحد فقط — يُمنع ترفيع أي حساب آخر إلى هذه الرتبة
@@ -97,7 +97,19 @@ Deno.serve(async (req: Request) => {
         if (hit) await supabaseAdmin.auth.admin.updateUserById(hit.id, { password: String(f.password) + SYSTEM_KEY });
       }
 
-      await writeLog(A, `عدّل بيانات حساب إداري (${target.email}).`);
+      // فرق دقيق (قديم → جديد) لكل حقل مُعدَّل، لسجل العمليات
+      const diffs: string[] = [];
+      if (patch.name != null && patch.name !== target.name) diffs.push(`الاسم: "${target.name ?? ""}" ← "${patch.name}"`);
+      if (patch.gender != null && patch.gender !== target.gender) {
+        diffs.push(`الجنس: ${target.gender === "female" ? "أنثى" : "ذكر"} ← ${patch.gender === "female" ? "أنثى" : "ذكر"}`);
+      }
+      if (patch.type != null && patch.type !== target.type) {
+        const lbl = (t: string) => (t === "owner" ? "مسؤول إداري" : "إداري");
+        diffs.push(`الصلاحية: ${lbl(target.type)} ← ${lbl(patch.type)}`);
+      }
+      if (f.password) diffs.push("تم تغيير كلمة المرور");
+
+      await writeLog(A, `عدّل بيانات حساب إداري (${target.name ?? target.email}). التغييرات: ${diffs.length ? diffs.join("، ") : "لا تغييرات فعلية"}.`);
       return jsonResponse({ error: false });
     }
 

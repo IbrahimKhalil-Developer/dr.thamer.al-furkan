@@ -89,10 +89,23 @@ Deno.serve(async (req: Request) => {
       const patch: Record<string, any> = {};
       for (const k of ALLOWED) if (k in f) patch[k] = f[k];
       if (!Object.keys(patch).length) return jsonResponse({ error: true, errors: "لا توجد حقول صالحة" }, 400);
+
+      const { data: before } = await supabaseAdmin.from("users")
+        .select("full_name, gender, date_of_brith, user_location").eq("user_id", userId).maybeSingle();
+
       patch.edited_admin_phone_number = A.phone_number ? toLocalPhone(A.phone_number) : A.name;
       const { error } = await supabaseAdmin.from("users").update(patch).eq("user_id", userId);
       if (error) return jsonResponse({ error: true, errors: error.message }, 400);
-      await writeLog(A, `عدّل بيانات الطالب (${patch.full_name ?? userId}). الحقول: ${Object.keys(patch).join("، ")}.`);
+
+      const FIELD_LABEL: Record<string, string> = {
+        full_name: "الاسم", gender: "الجنس", date_of_brith: "تاريخ الميلاد", user_location: "السكن",
+      };
+      const diffs = ALLOWED.filter((k) => k in f).map((k) => {
+        const oldV = k === "gender" ? (before?.gender === "female" ? "أنثى" : "ذكر") : ((before as any)?.[k] ?? "—");
+        const newV = k === "gender" ? (patch.gender === "female" ? "أنثى" : "ذكر") : patch[k];
+        return `${FIELD_LABEL[k]}: "${oldV}" ← "${newV}"`;
+      });
+      await writeLog(A, `عدّل بيانات الطالب (${patch.full_name ?? before?.full_name ?? userId}). التغييرات: ${diffs.join("، ")}.`);
       return jsonResponse({ error: false });
     }
 
@@ -169,7 +182,7 @@ Deno.serve(async (req: Request) => {
         notified = await sendWaha(phone, wrapMsg(A, txt));
       }
       const kindLbl = kind === "teacher" ? "مشرف" : kind === "admin" ? "إداري" : "طالب";
-      await writeLog(A, `أرسل كلمة سر (${kindLbl}) (${who}) عبر واتساب.`);
+      await writeLog(A, `أرسل كلمة سر (${kindLbl}) (${who} — ${phone || "—"}) عبر واتساب. ${notified ? "تم التسليم." : "فشل التسليم."}`);
       return jsonResponse({ error: false, notified });
     }
 
@@ -229,7 +242,7 @@ Deno.serve(async (req: Request) => {
           patch.old_status = save.status;
           stuMsg = `تم إيقاف ${g(sg, "حفظكَ", "حفظكِ")} (*${save.name}*) بشكل مؤقت.\nالسبب: ${reason || "لا يوجد"}`;
           tchMsg = `تم إيقاف حفظ ${g(sg, "الطالب", "الطالبة")} *${stu?.full_name ?? ""}* (*${save.name}*) مؤقتاً من قبل الإدارة.\nالسبب: ${reason || "لا يوجد"}`;
-          notes.push("إيقاف مؤقت");
+          notes.push(`الحالة: "${save.status}" ← "SUSPENDED" (السبب: ${reason || "لا يوجد"})`);
         } else if (f.status === "ACTIVE") {
           patch.status = "ACTIVE";
           patch.status_reason = null;
@@ -240,13 +253,13 @@ Deno.serve(async (req: Request) => {
           const mePage = lastRow?.MePageArabic;
           stuMsg = `تمت إعادة تفعيل ${g(sg, "حفظكَ", "حفظكِ")} (*${save.name}*).\nالحفظ المطلوب لليوم: *ص${mePage || "—"}*\nعند ${g(tg, "المشرف", "المشرفة")}: *${teacher_name}*`;
           tchMsg = `تمت إعادة تفعيل حفظ ${g(sg, "الطالب", "الطالبة")} *${stu?.full_name ?? ""}* (*${save.name}*).\nحفظ${g(sg, "ه", "ها")} لليوم: *ص${mePage || "—"}*\nسيتم إعلامك عند ${g(sg, "استعداده", "استعدادها")}.`;
-          notes.push("إعادة تفعيل");
+          notes.push(`الحالة: "${save.status}" ← "ACTIVE"`);
         } else { // TERMINATED
           patch.status = "TERMINATED";
           patch.status_reason = reason || null;
           stuMsg = `تم إنهاء ${g(sg, "حفظكَ", "حفظكِ")} الحالي (*${save.name}*).\nالسبب: ${reason || "لا يوجد"}\nإن كان هذا عن طريق الخطأ يُرجى التواصل مع إدارة المركز.`;
           tchMsg = `تم إنهاء حفظ ${g(sg, "الطالب", "الطالبة")} *${stu?.full_name ?? ""}* (*${save.name}*) من قبل الإدارة.\nالسبب: ${reason || "لا يوجد"}\nإن كان هذا عن طريق الخطأ يُرجى التواصل مع إدارة المركز.`;
-          notes.push("إنهاء نهائي");
+          notes.push(`الحالة: "${save.status}" ← "TERMINATED" (السبب: ${reason || "لا يوجد"})`);
         }
 
         if (notifyStudent(notifyTarget) && stu?.user_phone_number) {
@@ -288,7 +301,7 @@ Deno.serve(async (req: Request) => {
           const txt = `تم تحويل المشرف الخاص بحفظك (*${save.name}*) من *${oldT?.full_name ?? "—"}* إلى *${newT.full_name}*.\n${reqLine}`;
           await sendWaha(stu.user_phone_number, wrapMsg(A, txt));
         }
-        notes.push(`تبديل المشرف إلى ${newT.full_name}`);
+        notes.push(`المشرف: "${oldT?.full_name ?? "—"}" ← "${newT.full_name}"`);
       }
 
       if (!Object.keys(patch).length) return jsonResponse({ error: true, errors: "لا توجد تعديلات" }, 400);
@@ -452,7 +465,11 @@ Deno.serve(async (req: Request) => {
         if (cascaded) txt += `\nوقد تم تحديث حفظ الأيام التالية تلقائياً.`;
         notified.teacher = await sendWaha(tch.phone_number, wrapMsg(A, txt));
       }
-      await writeLog(A, `قيّم ${isExam ? "اختبار" : "صفحة"} ${g(sg, "الطالب", "الطالبة")} (${stu?.full_name ?? ""}) بتاريخ ${rowDate}. النتيجة: ${resultText}.${cascaded ? " وتمت إعادة مزامنة الصفوف التالية." : ""}`);
+      const oldStatusRaw = String(row.status ?? "");
+      const oldResultText = oldStatusRaw === "finished" ? psLabel(String(row.page_status ?? ""), isFU)
+        : ["user_absence", "teacher_absence", "holiday"].includes(oldStatusRaw) ? stateLabel(oldStatusRaw, isFU, iFT)
+        : (oldStatusRaw || "بلا تقييم سابق");
+      await writeLog(A, `قيّم ${isExam ? "اختبار" : "صفحة"} ${g(sg, "الطالب", "الطالبة")} (${stu?.full_name ?? ""}) بتاريخ ${rowDate}. النتيجة: "${oldResultText}" ← "${resultText}".${cascaded ? " وتمت إعادة مزامنة الصفوف التالية." : ""}`);
       return jsonResponse({ error: false, result: resultText, notified, cascaded });
     }
 

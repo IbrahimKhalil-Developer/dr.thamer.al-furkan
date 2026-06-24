@@ -127,10 +127,11 @@ Deno.serve(async (req: Request) => {
     if (action === "delete") {
       const id = String(body?.id ?? "");
       if (!id) return jsonResponse({ error: true, errors: "id مطلوب" }, 400);
-      const { data: h } = await supabaseAdmin.from("holidays").select("processed").eq("id", id).maybeSingle();
+      const { data: h } = await supabaseAdmin.from("holidays").select("processed, type, for_date, target_name").eq("id", id).maybeSingle();
       if (h?.processed === true) return jsonResponse({ error: true, errors: "لا يمكن حذف إجازة تم تنفيذها." }, 400);
       await supabaseAdmin.from("holidays").delete().eq("id", id);
-      await writeLog(A, `حذف إجازة (${id}).`);
+      const target = h?.type === "ALL" ? "الجميع" : (h?.target_name || "—");
+      await writeLog(A, `حذف إجازة (${target}) بتاريخ ${h?.for_date ?? "—"}.`);
       return jsonResponse({ error: false });
     }
 

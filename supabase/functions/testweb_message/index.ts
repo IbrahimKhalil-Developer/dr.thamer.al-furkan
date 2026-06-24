@@ -54,17 +54,20 @@ Deno.serve(async (req: Request) => {
     if (!recipients.length) return jsonResponse({ error: true, errors: "لا يوجد مستلمون" }, 400);
 
     let sent = 0, failed = 0, fatherSent = 0;
+    const sentList: string[] = [];
     const failedList: string[] = [];
     for (const r of recipients) {
       const ok = await sendWaha(r.phone, msg);
-      if (ok) sent++; else { failed++; failedList.push(r.name || r.phone); }
+      if (ok) { sent++; sentList.push(r.name || r.phone); } else { failed++; failedList.push(r.name || r.phone); }
       if (alsoFather && r.father) { if (await sendWaha(r.father, msg)) fatherSent++; }
     }
 
     const scope = target === "phone" ? `رقم ${phone}`
       : target.includes("student") ? `${recipients.length} طالب${alsoFather ? " + أولياء الأمور" : ""}`
       : `${recipients.length} مشرف`;
-    await writeLog(admin!, `أرسل رسالة واتساب إلى ${scope}. الناجح: ${sent}، الفاشل: ${failed}.`);
+    const sentNames = sentList.length ? sentList.join("، ") : "لا يوجد";
+    const failedNames = failedList.length ? failedList.join("، ") : "لا يوجد";
+    await writeLog(admin!, `أرسل رسالة واتساب إلى ${scope}.\nنص الرسالة: "${rawMsg}"\nالمستلمون الناجحون (${sent}): ${sentNames}.\nالمستلمون الفاشلون (${failed}): ${failedNames}.`);
 
     return jsonResponse({ error: false, total: recipients.length, sent, failed, father_sent: fatherSent, failed_names: failedList.slice(0, 50) });
   } catch (e) {

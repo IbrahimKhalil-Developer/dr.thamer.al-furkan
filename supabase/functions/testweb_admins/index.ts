@@ -60,16 +60,17 @@ Deno.serve(async (req: Request) => {
       if (!id) return jsonResponse({ error: true, errors: "id مطلوب" }, 400);
       if (String(id) === String(A.id)) return jsonResponse({ error: true, errors: "لا يمكنك تعديل حسابك الخاص من هنا" }, 400);
 
+      const { data: target } = await supabaseAdmin.from("admins").select("email, type").eq("id", id).maybeSingle();
+      if (!target) return jsonResponse({ error: true, errors: "الحساب غير موجود" }, 404);
+
       const patch: Record<string, any> = {};
       if (f.name != null) patch.name = String(f.name).trim();
       // رقم الهاتف لا يُعدّل أبداً — نتجاهل أي phone/phone_number وارد
       if (f.gender != null) patch.gender = f.gender === "female" ? "female" : "male";
-      if (f.type != null) patch.type = f.type === "owner" ? "owner" : "admin";
+      // لا يمكن تعديل صلاحية حساب بنفس رتبة "مسؤول إداري" (نظير في الرتبة) — يمنع الالتفاف على حماية toggle_active
+      if (f.type != null && target.type !== "owner") patch.type = f.type === "owner" ? "owner" : "admin";
       if (f.password) patch.password = String(f.password);
       if (!Object.keys(patch).length) return jsonResponse({ error: true, errors: "لا توجد تعديلات" }, 400);
-
-      const { data: target } = await supabaseAdmin.from("admins").select("email").eq("id", id).maybeSingle();
-      if (!target) return jsonResponse({ error: true, errors: "الحساب غير موجود" }, 404);
 
       const { error } = await supabaseAdmin.from("admins").update(patch).eq("id", id);
       if (error) return jsonResponse({ error: true, errors: error.message }, 400);

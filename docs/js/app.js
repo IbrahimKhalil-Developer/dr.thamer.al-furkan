@@ -80,6 +80,7 @@ function buildNav() {
 }
 
 function wireShell() {
+  $('#menu-toggle').innerHTML = icon('menu', 22);
   $('#btn-logout').onclick = () => { TW.logout(); location.reload(); };
   $('#btn-refresh').onclick = async () => { APP.dash = null; await getDash(true); router(true); UI.toast('تم تحديث البيانات', 'ok', 1500); };
   $('#menu-toggle').onclick = () => $('#app').classList.add('nav-open');
@@ -156,6 +157,7 @@ function collectFields(root) {
 function teacherOptions() {
   return (APP.dash?.teachers ?? []).map(t => [t.teacher_id, t.full_name]);
 }
+const NOTIFY_OPTS = [['both', 'الطالب والمشرف'], ['student', 'الطالب فقط'], ['teacher', 'المشرف فقط'], ['none', 'بدون إبلاغ']];
 
 async function runAction(btn, fn, opts = {}) {
   const orig = btn.innerHTML;
@@ -205,8 +207,27 @@ function pageOverview() {
       ${UI.badge('blue', t.students_count + ' طالب')}
     </div>`).join('') || UI.empty('لا مشرفين', 'teacher');
 
+  const rankPanel = (title, list) => {
+    if (!list || !list.length) return `<div class="panel"><div class="panel-head"><h2>${UI.esc(title)}</h2></div>${UI.empty('لا بيانات', 'records')}</div>`;
+    const rows = list.map(r => {
+      const max = r.max > 0 ? r.max : 1;
+      const w = Math.max(0, Math.min(100, (r.value / max) * 100));
+      const g = r.gender === 'female' ? 'أنثى' : 'ذكر';
+      return `<div class="rank-row" onclick="location.hash='#/students/${UI.attr(r.user_id)}'" style="cursor:pointer">
+        <span class="rank-name">${UI.esc(r.name)} <span class="muted" style="font-weight:400">— ${g}</span></span>
+        <div class="rank-bar"><div style="width:${w}%"></div></div>
+        <span class="rank-val">${UI.esc(r.value)}</span>
+      </div>`;
+    }).join('');
+    return `<div class="panel"><div class="panel-head"><h2>${UI.esc(title)}</h2></div><div>${rows}</div></div>`;
+  };
+
   view().innerHTML = `
     <div class="cards-grid">${cards}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px">
+      ${rankPanel('الأكثر نجاحاً', APP.dash.top_success)}
+      ${rankPanel('الأكثر غياباً', APP.dash.top_absence)}
+    </div>
     <div class="panel">
       <div class="panel-head"><h2>أكثر المشرفين طلاباً</h2></div>
       <div style="display:grid;gap:10px">${topT}</div>
@@ -310,7 +331,7 @@ async function pageStudentDetail(id) {
   const u = res.user, saves = res.saves;
 
   const avatar = u.photo_url
-    ? `<div class="avatar" style="width:78px;height:78px"><img src="${UI.esc(u.photo_url)}"></div>`
+    ? `<div class="avatar" style="width:78px;height:78px"><img src="${UI.esc(u.photo_url)}" style="cursor:zoom-in" onclick="UI.imageViewer('${UI.attr(u.photo_url)}')"></div>`
     : `<div class="avatar" style="width:78px;height:78px">${icon('students', 30)}</div>`;
 
   const badges = [];
@@ -321,7 +342,6 @@ async function pageStudentDetail(id) {
   const info = kvGrid([
     ['رقم الهاتف', UI.copyField(u.phone)],
     ['هاتف ولي الأمر', UI.copyField(u.father_phone)],
-    ['كلمة المرور', UI.pwField(u.password)],
     ['البريد', UI.copyField(u.email)],
     ['الجنس', UI.esc(u.gender_label)],
     ['تاريخ الميلاد', UI.esc(u.date_of_brith)],
@@ -335,6 +355,12 @@ async function pageStudentDetail(id) {
 
   const savesHtml = saves.length ? saves.map(saveBlock).join('') : `<div class="panel">${UI.empty('لا توجد سيرة حفظية لهذا الطالب', 'records')}</div>`;
 
+  const absenceInfo = (Array.isArray(u.absence_info) && u.absence_info.length)
+    ? `<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+        <h3 style="font-size:14px;font-weight:700;margin-bottom:8px">تفاصيل الغياب</h3>
+        ${kvGrid(u.absence_info.map(([k, v]) => [k, UI.esc(v)]))}
+      </div>` : '';
+
   view().innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="history.back()" style="margin-bottom:14px">→ رجوع</button>
     <div class="panel">
@@ -347,12 +373,16 @@ async function pageStudentDetail(id) {
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-start">
           <button class="btn btn-ghost btn-sm" onclick="openEditStudentModal()">${icon('edit', 14)} تعديل الملف</button>
           <button class="btn btn-ghost btn-sm" onclick="openSetPasswordModal('student','${UI.attr(u.user_id)}','${UI.attr(u.full_name)}')">${icon('key', 14)} كلمة المرور</button>
+          <button class="btn btn-ghost btn-sm" onclick="openSendPasswordModal('student','${UI.attr(u.user_id)}')">${icon('send', 14)} إرسال كلمة السر</button>
           <button class="btn btn-ghost btn-sm" onclick="openAddSaveModal()">${icon('plus', 14)} حفظ جديد</button>
+          <button class="btn btn-ghost btn-sm" onclick="openProfileIncompleteModal()">${icon('alert', 14)} ملف غير مكتمل</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearStudentAbsence()">${icon('holiday', 14)} حذف الغيابات</button>
           <button class="btn btn-primary btn-sm" onclick="openQuickMessageModal('${UI.attr(u.phone)}','${UI.attr(u.full_name)}')">${icon('message', 14)} رسالة</button>
           <button class="btn btn-danger btn-sm" onclick="openDeleteStudentModal()">${icon('trash', 14)} حذف</button>
         </div>
       </div>
       ${info}
+      ${absenceInfo}
     </div>
     <div class="panel-head" style="margin:18px 4px 12px"><h2>السيرة الحفظية (${saves.length})</h2></div>
     ${savesHtml}`;
@@ -473,6 +503,20 @@ function openSetPasswordModal(kind, id, name) {
   };
 }
 
+function openSendPasswordModal(kind, id) {
+  const body = `<p class="muted" style="margin-bottom:14px">سيتم إرسال كلمة المرور عبر واتساب. أدخل كلمة مرور حسابك للتأكيد.</p>
+    ${fieldHtml('كلمة مرور حسابك', 'admin_password', '', 'password')}`;
+  const foot = `<button class="btn btn-primary" id="md-ok">إرسال</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('إرسال كلمة السر', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    if (!f.admin_password) { UI.toast('أدخل كلمة المرور', 'err'); return; }
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'send_password', kind, id, admin_password: f.admin_password }),
+      { okMsg: 'تم إرسال كلمة السر', modal: m, refreshDash: false });
+  };
+}
+
 function openDeleteStudentModal() {
   const u = APP.current.user;
   const body = `<p style="color:var(--red);font-weight:700;margin-bottom:14px">سيتم حذف الطالب <b>${UI.esc(u.full_name)}</b> نهائياً مع كامل سيرته الحفظية وصفحاته. هذا الإجراء لا يمكن التراجع عنه.</p>
@@ -488,24 +532,58 @@ function openDeleteStudentModal() {
   };
 }
 
+function openProfileIncompleteModal() {
+  const u = APP.current.user;
+  const body = `<p class="muted" style="margin-bottom:14px">سيتم تعيين ملف <b>${UI.esc(u.full_name)}</b> كملف غير مكتمل. يمكنك إضافة سبب (اختياري) يظهر للطالب.</p>
+    ${textareaHtml('السبب (اختياري)', 'reason', '', 'مثال: يرجى استكمال الصورة الشخصية...')}`;
+  const foot = `<button class="btn btn-primary" id="md-ok">تعيين كملف ناقص</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('ملف غير مكتمل', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'set_profile_incomplete', user_id: u.user_id, reason: f.reason || '' }),
+      { okMsg: 'تم تعيين الملف كغير مكتمل', modal: m, after: () => pageStudentDetail(u.user_id) });
+  };
+}
+
+async function clearStudentAbsence() {
+  const u = APP.current.user;
+  if (!await UI.confirm('حذف الغيابات', `هل تريد حذف جميع غيابات الطالب ${u.full_name}؟`, 'حذف')) return;
+  try {
+    await TW.call('testweb_mutate', { action: 'clear_absence', user_id: u.user_id });
+    UI.toast('تم حذف الغيابات', 'ok');
+    await getDash(true);
+    pageStudentDetail(u.user_id);
+  } catch (e) { UI.toast(e.message, 'err'); }
+}
+
 function openAddSaveModal() {
   const u = APP.current.user;
   const activeSave = APP.current.saves.find(s => s.is_current && (s.status === 'ACTIVE' || s.status === 'SUSPENDED'));
   const warn = activeSave ? `<p style="color:var(--gold);margin-bottom:14px">${icon('alert', 14)} يوجد حفظ نشط حالياً (${UI.esc(activeSave.name)})، سيتم إنهاؤه تلقائياً عند إضافة حفظ جديد.</p>` : '';
+  const tOpts = [['', '—']].concat(teacherOptions());
+  const yesNo = [['false', 'لا'], ['true', 'نعم']];
   const body = `${warn}<div class="form-grid">
     ${fieldHtml('اسم الحفظ', 'save_name', '')}
     ${selectHtml('المشرف', 'teacher_id', u.teacher_id, teacherOptions())}
     ${fieldHtml('من صفحة', 'start_page', '', 'number')}
     ${fieldHtml('إلى صفحة', 'end_page', '', 'number')}
     ${fieldHtml('الورد اليومي', 'every_day_page', '1', 'number')}
+    ${selectHtml('يقيّم اليوم؟', 'evaluate_today', 'false', yesNo)}
+    ${selectHtml('تفعيل الاختبار الجزئي', 'exam1', 'false', yesNo)}
+    ${selectHtml('مشرف الاختبار الجزئي', 'exam1_teacher_id', '', tOpts)}
+    ${selectHtml('تفعيل الاختبار التراكمي', 'exam2', 'false', yesNo)}
+    ${selectHtml('مشرف الاختبار التراكمي', 'exam2_teacher_id', '', tOpts)}
+    ${selectHtml('الإبلاغ', 'notify_target', 'both', NOTIFY_OPTS)}
   </div>`;
   const foot = `<button class="btn btn-primary" id="md-ok">إضافة الحفظ</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
   const m = UI.modal('حفظ جديد', body, foot);
   m.el.querySelector('#md-cancel').onclick = m.close;
   m.el.querySelector('#md-ok').onclick = async ev => {
     const f = collectFields(m.el);
+    const notify_target = f.notify_target; delete f.notify_target;
     await runAction(ev.target, () => TW.call('testweb_mutate', {
-      action: 'add_save', user_id: u.user_id, replace_save_id: activeSave ? activeSave.id : null, fields: f,
+      action: 'add_save', user_id: u.user_id, replace_save_id: activeSave ? activeSave.id : null, fields: f, notify_target,
     }), { okMsg: 'تم إضافة الحفظ', modal: m, after: () => pageStudentDetail(u.user_id) });
   };
 }
@@ -515,15 +593,19 @@ function openEditSaveModal(saveId) {
   const tOpts = [['', '—']].concat(teacherOptions());
   const body = `<div class="form-grid">
     ${fieldHtml('إلى صفحة', 'end_page', s.end_page, 'number')}
-    ${selectHtml('الحالة', 'status', s.status, [['ACTIVE', 'نشط'], ['SUSPENDED', 'موقوف مؤقتاً']])}
+    ${selectHtml('الحالة', 'status', s.status, [['ACTIVE', 'نشط'], ['SUSPENDED', 'موقوف مؤقتاً'], ['TERMINATED', 'إلغاء الحفظ نهائياً']])}
     ${selectHtml('المشرف', 'teacher_id', s.teacher_id, tOpts)}
-  </div>`;
+    ${selectHtml('الإبلاغ', 'notify_target', 'both', NOTIFY_OPTS)}
+  </div>
+  ${textareaHtml('سبب التعديل (اختياري)', 'status_reason', '', 'سبب التعديل أو التوقيف...')}`;
   const foot = `<button class="btn btn-primary" id="md-ok">حفظ</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
   const m = UI.modal('تعديل الحفظ', body, foot);
   m.el.querySelector('#md-cancel').onclick = m.close;
   m.el.querySelector('#md-ok').onclick = async ev => {
     const f = collectFields(m.el);
-    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'update_save', save_id: s.id, fields: f }),
+    const notify_target = f.notify_target;
+    const fields = { end_page: f.end_page, status: f.status, teacher_id: f.teacher_id, status_reason: f.status_reason || '' };
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'update_save', save_id: s.id, fields, notify_target }),
       { okMsg: 'تم حفظ بيانات الحفظ', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
   };
 }
@@ -554,7 +636,7 @@ function openGradeModal(table, rowId, isExam) {
   const body = `<p class="muted" style="margin-bottom:14px">اختر نتيجة التقييم، وسيُرسل إشعار للطالب ومشرفه تلقائياً.</p>
     <div class="form-grid">${fieldHtml('التسويد (0-999)', 'sowad', 0, 'number')}${fieldHtml('النسيان (0-999)', 'nisyan', 0, 'number')}${isExam ? fieldHtml('الفتح (0-999)', 'fateh', 0, 'number') : ''}</div>
     ${textareaHtml('ملاحظة (اختياري)', 'custom_info_text', '', 'ملاحظة تظهر للطالب...')}
-    <div class="field"><label><input type="checkbox" id="g-notify" checked style="width:auto;margin-left:6px">إرسال إشعار واتساب للطالب والمشرف</label></div>
+    ${selectHtml('الإبلاغ', 'notify_target', 'both', NOTIFY_OPTS)}
     <div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span class="muted">التقدير المتوقّع:</span><span id="g-pv">—</span></div>`;
   const foot = `<button class="btn btn-primary" id="md-ok">حفظ التقييم</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
   const m = UI.modal(isExam ? 'تقييم اختبار' : 'تقييم حفظ اليوم', body, foot);
@@ -572,7 +654,7 @@ function openGradeModal(table, rowId, isExam) {
     const payload = {
       action: 'grade_page', table, row_id: rowId, state: 'finished',
       sowad: +g.sowad || 0, nisyan: +g.nisyan || 0, fateh: +g.fateh || 0,
-      custom_info_text: g.custom_info_text || '', notify: m.el.querySelector('#g-notify').checked,
+      custom_info_text: g.custom_info_text || '', notify_target: g.notify_target || 'both',
     };
     await runAction(ev.target, () => TW.call('testweb_mutate', payload),
       { okMsg: 'تم حفظ التقييم وإرسال الإشعار', modal: m, refreshDash: false, after: () => pageStudentDetail(APP.current.user.user_id) });
@@ -647,7 +729,7 @@ async function pageTeacherDetail(id) {
   catch (e) { view().innerHTML = UI.errorBox(e.message); return; }
   const t = res.teacher;
   const avatar = t.photo_url
-    ? `<div class="avatar" style="width:78px;height:78px"><img src="${UI.esc(t.photo_url)}"></div>`
+    ? `<div class="avatar" style="width:78px;height:78px"><img src="${UI.esc(t.photo_url)}" style="cursor:zoom-in" onclick="UI.imageViewer('${UI.attr(t.photo_url)}')"></div>`
     : `<div class="avatar" style="width:78px;height:78px">${icon('teacher', 30)}</div>`;
   const info = kvGrid([
     ['رقم الهاتف', UI.copyField(t.phone)],
@@ -682,6 +764,7 @@ async function pageTeacherDetail(id) {
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-start">
           <button class="btn btn-ghost btn-sm" onclick="openSetPasswordModal('teacher','${UI.attr(t.teacher_id)}','${UI.attr(t.full_name)}')">${icon('key', 14)} كلمة المرور</button>
+          <button class="btn btn-ghost btn-sm" onclick="openSendPasswordModal('teacher','${UI.attr(t.teacher_id)}')">${icon('send', 14)} إرسال كلمة السر</button>
           <button class="btn btn-primary btn-sm" onclick="openQuickMessageModal('${UI.attr(t.phone)}','${UI.attr(t.full_name)}')">${icon('message', 14)} رسالة</button>
         </div>
       </div>
@@ -777,17 +860,44 @@ async function sendBulkMsg(btn, payload, modal) {
 
 /* ================= رموز الدخول (OTP) ================= */
 let otpTimer = null;
-async function pageOtps() {
+function pageOtps() {
+  if (otpTimer) { clearInterval(otpTimer); otpTimer = null; }
+  view().innerHTML = `<div class="panel">
+    <div class="panel-head"><h2>آخر رموز الدخول المُرسَلة</h2></div>
+    <p class="muted" style="margin-bottom:14px">لعرض الرموز يجب إدخال كلمة مرور حسابك للتأكيد.</p>
+    <div style="max-width:360px">
+      ${fieldHtml('كلمة مرور حسابك', 'otp-pw', '', 'password')}
+      <p id="otp-err" class="err-text hidden"></p>
+      <button class="btn btn-primary btn-block" id="otp-show" style="margin-top:6px">${icon('key', 15)} عرض الرموز</button>
+    </div>
+  </div>`;
+  const pwEl = $('#view [data-k="otp-pw"]');
+  const errEl = $('#otp-err');
+  const submit = async ev => {
+    const pw = pwEl.value;
+    errEl.classList.add('hidden');
+    if (!pw) { errEl.textContent = 'أدخل كلمة المرور'; errEl.classList.remove('hidden'); return; }
+    const btn = ev.target.closest('button'); const orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+    try {
+      const res = await TW.call('testweb_otps', { limit: 40, admin_password: pw });
+      renderOtpsPage(res.otps);
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.remove('hidden');
+      btn.disabled = false; btn.innerHTML = orig;
+    }
+  };
+  $('#otp-show').onclick = submit;
+  pwEl.addEventListener('keydown', e => { if (e.key === 'Enter') submit(e); });
+}
+function renderOtpsPage(otps) {
   if (otpTimer) { clearInterval(otpTimer); otpTimer = null; }
   view().innerHTML = `<div class="panel">
     <div class="panel-head"><h2>آخر رموز الدخول المُرسَلة</h2><button class="btn btn-ghost btn-sm" onclick="pageOtps()">${icon('refresh', 14)} تحديث</button></div>
     <p class="muted" style="margin-bottom:14px">يُفكّ تشفير الرمز الأصلي تلقائياً. صلاحية كل رمز دقيقتان من وقت الإرسال.</p>
-    <div id="otp-wrap"><span class="spinner"></span></div>
+    <div id="otp-wrap"></div>
   </div>`;
-  let res;
-  try { res = await TW.call('testweb_otps', { limit: 40 }); }
-  catch (e) { $('#otp-wrap').innerHTML = UI.errorBox(e.message); return; }
-  renderOtps(res.otps);
+  renderOtps(otps);
   otpTimer = setInterval(() => {
     document.querySelectorAll('[data-exp]').forEach(el => {
       let s = +el.getAttribute('data-exp'); s = Math.max(0, s - 1); el.setAttribute('data-exp', s);
@@ -881,13 +991,29 @@ async function pageLogs() {
   catch (e) { $('#logs-wrap').innerHTML = UI.errorBox(e.message); return; }
   const wrap = $('#logs-wrap');
   if (!res.logs.length) { wrap.innerHTML = UI.empty('لا سجلّات', 'logs'); return; }
-  const rows = res.logs.map(l => `<tr>
+  const rows = res.logs.map((l, i) => {
+    const msg = String(l.message || '');
+    let msgCell;
+    if (msg.length > 100) {
+      const id = 'log' + i;
+      msgCell = `<span id="${id}-s">${UI.esc(msg.slice(0, 100))}… <button class="btn btn-ghost btn-sm" onclick="toggleLogMsg('${id}')">عرض التفاصيل</button></span>
+        <span id="${id}-f" class="hidden">${UI.esc(msg)} <button class="btn btn-ghost btn-sm" onclick="toggleLogMsg('${id}')">إخفاء</button></span>`;
+    } else {
+      msgCell = UI.esc(msg);
+    }
+    return `<tr>
     <td class="muted" style="white-space:nowrap">${UI.fmtDate(l.created_at)}</td>
     <td>${UI.badge(l.actor_role === 'مشرف' ? 'teal' : l.actor_role === 'مسؤول إداري' ? 'purple' : 'blue', l.actor_role)}</td>
     <td><b>${UI.esc(l.actor_name)}</b></td>
-    <td>${UI.esc(l.message)}</td>
-  </tr>`).join('');
+    <td style="white-space:normal">${msgCell}</td>
+  </tr>`;
+  }).join('');
   wrap.innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>الوقت</th><th>الصلاحية</th><th>المنفّذ</th><th>الإجراء</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function toggleLogMsg(id) {
+  const s = document.getElementById(id + '-s'); const f = document.getElementById(id + '-f');
+  if (!s || !f) return;
+  s.classList.toggle('hidden'); f.classList.toggle('hidden');
 }
 
 /* ================= الإداريون (مالك فقط) ================= */
@@ -909,7 +1035,8 @@ async function pageAdmins() {
     <td class="muted">${UI.fmtDate(a.last_opened_in)}</td>
     <td>${a.is_self ? '' : `
       <button class="icon-btn" title="تعديل" onclick='openAdminFormModal(${JSON.stringify(a).replace(/'/g, "&#39;")})'>${icon('edit', 14)}</button>
-      <button class="icon-btn" title="${a.active ? 'إلغاء التفعيل' : 'إعادة التفعيل'}" onclick="toggleAdmin('${a.id}')">${icon(a.active ? 'ban' : 'check', 14)}</button>
+      ${a.type === 'owner' ? '' : `<button class="icon-btn" title="${a.active ? 'إلغاء التفعيل' : 'إعادة التفعيل'}" onclick="toggleAdmin('${a.id}')">${icon(a.active ? 'ban' : 'check', 14)}</button>`}
+      <button class="icon-btn" title="إرسال كلمة السر" onclick="openSendPasswordModal('admin','${UI.attr(a.id)}')">${icon('send', 14)}</button>
     `}</td>
   </tr>`).join('');
   wrap.innerHTML = `<div class="tbl-wrap"><table>
@@ -958,23 +1085,36 @@ function recordsTable(rows) {
     <td>${UI.esc(r.page_label)}</td>
     <td>${UI.gradeBadge(r.grade_kind, r.status_label)}</td>
     <td class="muted">${UI.esc(r.sowad)}</td><td class="muted">${UI.esc(r.nisyan)}</td><td class="muted">${UI.esc(r.fateh)}</td>
+    <td class="muted">${r.takeem ?? '—'}</td>
+    <td>${r.review_kind ? UI.gradeBadge(r.review_kind, r.review_label) : '—'}</td>
   </tr>`).join('');
   return `<div class="tbl-wrap"><table>
-    <thead><tr><th>التاريخ</th><th>الطالب</th><th>المشرف</th><th>الحفظ</th><th>الصفحة/النوع</th><th>الحالة</th><th>تسويد</th><th>نسيان</th><th>فتح</th></tr></thead>
+    <thead><tr><th>التاريخ</th><th>الطالب</th><th>المشرف</th><th>الحفظ</th><th>الصفحة/النوع</th><th>الحالة</th><th>تسويد</th><th>نسيان</th><th>فتح</th><th>مقدار المراجعة</th><th>تقييم المراجعة</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
 }
 
 async function pageTodayLog() {
+  const today = baghdadDateStr();
   view().innerHTML = `<div class="panel">
-    <div class="panel-head"><h2>سجل الطلاب لليوم</h2><div id="tl-actions"></div></div>
+    <div class="panel-head"><h2>سجل الطلاب لليوم</h2>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <input type="date" class="f-input" id="tl-date" value="${UI.attr(today)}" style="width:auto">
+        <div id="tl-actions"></div>
+      </div>
+    </div>
     <div id="tl-wrap"><span class="spinner"></span></div>
   </div>`;
-  let res;
-  try { res = await TW.call('testweb_records', { action: 'today' }); }
-  catch (e) { $('#tl-wrap').innerHTML = UI.errorBox(e.message); return; }
-  $('#tl-actions').innerHTML = `<button class="btn btn-primary btn-sm" id="tl-export">${icon('download', 14)} تصدير Excel</button>`;
-  $('#tl-export').onclick = () => exportRowsToExcel(res.rows, `سجل الطلاب ليوم ${res.date}`, `سجل-اليوم-${res.date}.xlsx`);
-  $('#tl-wrap').innerHTML = `<p class="muted" style="margin-bottom:10px">التاريخ: ${UI.esc(res.date)} — عدد الصفوف: ${res.count}</p>${recordsTable(res.rows)}`;
+  const load = async (date) => {
+    $('#tl-wrap').innerHTML = `<span class="spinner"></span>`;
+    let res;
+    try { res = await TW.call('testweb_records', { action: 'today', date }); }
+    catch (e) { $('#tl-wrap').innerHTML = UI.errorBox(e.message); return; }
+    $('#tl-actions').innerHTML = `<button class="btn btn-primary btn-sm" id="tl-export">${icon('download', 14)} تصدير Excel</button>`;
+    $('#tl-export').onclick = () => exportRowsToExcel(res.rows, `سجل الطلاب ليوم ${res.date}`, `سجل-اليوم-${res.date}.xlsx`);
+    $('#tl-wrap').innerHTML = `<p class="muted" style="margin-bottom:10px">التاريخ: ${UI.esc(res.date)} — عدد الصفوف: ${res.count}</p>${recordsTable(res.rows)}`;
+  };
+  $('#tl-date').addEventListener('change', e => load(e.target.value));
+  load(today);
 }
 
 /* ================= سجل الطلاب (كامل) ================= */
@@ -1013,9 +1153,9 @@ async function pageFullLogStudent(userId) {
 
 function exportRowsToExcel(rows, title, fileName) {
   if (!window.XLSX) { UI.toast('مكتبة التصدير غير متوفرة', 'err'); return; }
-  const headers = ['التاريخ', 'الطالب', 'المشرف', 'الحفظ', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح'];
+  const headers = ['التاريخ', 'الطالب', 'المشرف', 'الحفظ', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح', 'مقدار المراجعة', 'تقييم المراجعة'];
   const aoa = [[title], [`عدد الصفوف: ${rows.length} — ${new Date().toLocaleString('ar-EG')}`], [], headers];
-  rows.forEach(r => aoa.push([UI.fmtDateShort(r.date), r.student_name, r.teacher_name, r.save_name, r.page_label, r.status_label, r.sowad, r.nisyan, r.fateh]));
+  rows.forEach(r => aoa.push([UI.fmtDateShort(r.date), r.student_name, r.teacher_name, r.save_name, r.page_label, r.status_label, r.sowad, r.nisyan, r.fateh, r.takeem ?? '', r.review_label ?? '']));
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'البيانات');
@@ -1031,8 +1171,8 @@ async function exportAllStudents() {
     res.students.forEach(st => {
       let name = (st.student_name || 'طالب').replace(/[\\/?*\[\]:]/g, '').slice(0, 28) || 'طالب';
       const base = name; let i = 1; while (used.has(name)) name = `${base}_${i++}`; used.add(name);
-      const aoa = [[st.student_name], [], ['التاريخ', 'المشرف', 'الحفظ', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح']];
-      st.rows.forEach(r => aoa.push([UI.fmtDateShort(r.date), r.teacher_name, r.save_name, r.page_label, r.status_label, r.sowad, r.nisyan, r.fateh]));
+      const aoa = [[st.student_name], [], ['التاريخ', 'المشرف', 'الحفظ', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح', 'مقدار المراجعة', 'تقييم المراجعة']];
+      st.rows.forEach(r => aoa.push([UI.fmtDateShort(r.date), r.teacher_name, r.save_name, r.page_label, r.status_label, r.sowad, r.nisyan, r.fateh, r.takeem ?? '', r.review_label ?? '']));
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       XLSX.utils.book_append_sheet(wb, ws, name);
     });

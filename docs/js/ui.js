@@ -113,6 +113,20 @@ const UI = {
     bg.addEventListener('mousedown', e => { if(e.target===bg) close(); });
   },
 
+  imageViewer(src){
+    if(!src) return;
+    const root = document.getElementById('viewer-root') || document.body;
+    const bg = document.createElement('div'); bg.className = 'img-viewer';
+    bg.innerHTML = `<button class="img-viewer-x" title="إغلاق">${icon('close',18)}</button>
+      <img src="${UI.attr(src)}" alt="">`;
+    root.appendChild(bg);
+    const close = () => { bg.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = e => { if(e.key === 'Escape') close(); };
+    bg.querySelector('.img-viewer-x').onclick = close;
+    bg.addEventListener('mousedown', e => { if(e.target === bg) close(); });
+    document.addEventListener('keydown', onKey);
+  },
+
   empty(text, ic='page'){
     return `<div class="empty-state">${icon(ic,40)}<div>${UI.esc(text)}</div></div>`;
   },

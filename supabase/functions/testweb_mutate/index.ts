@@ -328,7 +328,7 @@ Deno.serve(async (req: Request) => {
       const table = String(body?.table ?? "pages");
       const rowId = body?.row_id;
       const state = String(body?.state ?? "finished");
-      const notify = body?.notify !== false;
+      const notifyTarget = resolveNotifyTarget(body);
       if (rowId == null) return jsonResponse({ error: true, errors: "row_id مطلوب" }, 400);
 
       const tbl = table === "tests" ? "users_pages_tests" : "users_pages";
@@ -343,18 +343,45 @@ Deno.serve(async (req: Request) => {
         : { data: null };
       const isFU = stu?.gender === "female";
       const iFT = tch?.gender === "female";
+      const sg = stu?.gender;
+
+      // ── تحديد موقع الصف ضمن صفوف حفظه (للصفحات فقط) ─────────────────
+      // isLast = آخر صف، isSecondLast = الصف قبل الأخير، isOld = أقدم من ذلك.
+      let isLast = true, isSecondLast = false, isOld = false;
+      let orderedRows: any[] = [];
+      if (!isExam && row.save_id) {
+        const { data: rows } = await supabaseAdmin.from("users_pages")
+          .select("id, page, MePageArabic, status, page_status, date")
+          .eq("save_id", row.save_id).order("id", { ascending: true });
+        orderedRows = rows ?? [];
+        const idx = orderedRows.findIndex((r) => String(r.id) === String(rowId));
+        const lastIdx = orderedRows.length - 1;
+        isLast = idx === lastIdx;
+        isSecondLast = idx === lastIdx - 1;
+        isOld = idx >= 0 && idx < lastIdx - 1;
+      }
 
       const patch: Record<string, any> = { finished_at: nowIso() };
       let resultText = "";
+      let resultPs = ""; // نتيجة التقييم الخام (reject/good/very_good/perfect)
 
       if (state === "finished") {
         const sowad = num(body?.sowad), nisyan = num(body?.nisyan), fateh = num(body?.fateh);
         const ps = isExam ? calcExam(sowad, nisyan, fateh) : calcNotExam(sowad, nisyan);
+        resultPs = ps;
+        // قاعدة الصف القديم: لا يُسمح بجعله راسباً، فقط ضمن نطاق النجاح.
+        if (!isExam && isOld && ps === "reject") {
+          return jsonResponse({ error: true, errors: "لا يمكن جعل صف قديم راسباً، يُسمح فقط بتعديل الأخطاء ضمن نطاق النجاح (٠ إلى ٢)." }, 400);
+        }
         patch.status = "finished"; patch.page_status = ps; patch.takeem_status = ps;
         patch.errors_number = isExam ? { sowad, nisyan, fateh } : { sowad, nisyan };
         if (body?.custom_info_text) patch.custom_info = String(body.custom_info_text);
         resultText = psLabel(ps, isFU);
       } else if (["user_absence", "teacher_absence", "holiday"].includes(state)) {
+        // الغياب/الإجازة على صف قديم لا يُسمح به (يكسر التقدم)
+        if (!isExam && isOld) {
+          return jsonResponse({ error: true, errors: "لا يمكن جعل صف قديم راسباً، يُسمح فقط بتعديل الأخطاء ضمن نطاق النجاح (٠ إلى ٢)." }, 400);
+        }
         patch.status = state; patch.page_status = state;
         resultText = stateLabel(state, isFU, iFT);
       } else {
@@ -364,20 +391,66 @@ Deno.serve(async (req: Request) => {
       const { error } = await supabaseAdmin.from(tbl).update(patch).eq("id", rowId);
       if (error) return jsonResponse({ error: true, errors: error.message }, 400);
 
-      let notified = { student: false, teacher: false };
-      if (notify) {
-        const ctx = isExam ? (row.type === "EXAM2" ? "الاختبار التراكمي" : "الاختبار الجزئي") : "حفظ اليوم";
-        if (stu?.user_phone_number) {
-          const txt = `تم تعديل نتيجة ${g(stu.gender, "حفظكَ", "حفظكِ")} (${ctx}) من قبل الإدارة.\nالنتيجة الجديدة: *${resultText}*\n${g(stu.gender, "يمكنكَ", "يمكنكِ")} الإطلاع على التفاصيل من تطبيق تحفيظ.`;
-          notified.student = await sendWaha(stu.user_phone_number, wrapMsg(A, txt));
+      // ── الترحيل (cascade): إعادة مزامنة الصفوف التالية إن لم يكن الصف الأخير ─
+      // عند تعديل صف ليس الأخير، نُعيد حساب أرقام صفحات الصفوف التالية بناءً على
+      // التقدم الجاري (آخر صفحة ناجحة + every_day_page) ونُعيدها إلى not_ready.
+      // ملاحظة (قيد): القاعدة مبسّطة — تفترض أن كل صف ناجح يتقدم بمقدار edp،
+      // وتعتبر الرسوب/الغياب توقفاً (بقاء على نفس الصفحة). لا تعالج فترات
+      // الإجازات/التعليق بنفس تعقيد pages_system؛ الهدف إبقاء سلسلة الصفحات
+      // متّسقة فقط، وتُعاد الصفوف اللاحقة إلى not_ready ليُعاد تقييمها.
+      let cascaded = false;
+      if (!isExam && !isLast && row.save_id && orderedRows.length) {
+        const { data: saveRow } = await supabaseAdmin.from("users_saves")
+          .select("start_page, every_day_page").eq("id", row.save_id).maybeSingle();
+        const edpRaw = Number(saveRow?.every_day_page) || 1;
+        const edpStep = edpRaw < 1 ? 1 : Math.ceil(edpRaw);
+        const startPage = Number(saveRow?.start_page) || 1;
+
+        const idx = orderedRows.findIndex((r) => String(r.id) === String(rowId));
+        // الصفحة الناجحة الجارية حتى الصف المُعدَّل (شاملاً):
+        // نمشي من البداية ونحسب آخر صفحة "ناجحة".
+        const isSuccess = (st: string, ps: string) =>
+          st === "finished" && (ps === "good" || ps === "very_good" || ps === "perfect");
+
+        // أعد بناء التقدم حتى الصف المعدّل باستخدام قيمته الجديدة
+        let lastSuccessPage = startPage - edpStep;
+        for (let i = 0; i <= idx; i++) {
+          const r = orderedRows[i];
+          const st = i === idx ? (state === "finished" ? "finished" : state) : String(r.status ?? "");
+          const ps = i === idx ? resultPs : String(r.page_status ?? "");
+          if (isSuccess(st, ps)) lastSuccessPage = lastSuccessPage + edpStep;
+          // وإلا توقف: تبقى الصفحة كما هي (لا تقدم)
         }
-        if (tch?.phone_number) {
-          const txt = `${g(tch.gender, "عزيزي المشرف", "عزيزتي المشرفة")},\nتم تعديل نتيجة ${g(stu?.gender, "الطالب", "الطالبة")} *${stu?.full_name ?? ""}* (${ctx}) من قبل الإدارة إلى: *${resultText}*`;
-          notified.teacher = await sendWaha(tch.phone_number, wrapMsg(A, txt));
+
+        // أعد مزامنة الصفوف التالية: كل صف لاحق = آخر صفحة ناجحة + edp.
+        // نفترض أن كل صف سيُسمَّع بنجاح عند إعادة تقييمه فيتقدم بمقدار edp.
+        for (let i = idx + 1; i < orderedRows.length; i++) {
+          const r = orderedRows[i];
+          const nextPage = lastSuccessPage + edpStep;
+          lastSuccessPage = nextPage;
+          const disp = buildPageDisplay(nextPage, edpRaw);
+          await supabaseAdmin.from("users_pages").update({
+            status: "not_ready", page_status: "not_ready",
+            page: nextPage, MePageArabic: disp,
+          }).eq("id", r.id);
+          cascaded = true;
         }
       }
-      await writeLog(A, `قيّم ${isExam ? "اختبار" : "صفحة"} ${g(stu?.gender, "الطالب", "الطالبة")} (${stu?.full_name ?? ""}). النتيجة: ${resultText}.`);
-      return jsonResponse({ error: false, result: resultText, notified });
+
+      const rowDate = String(row.date ?? "").split("T")[0] || "—";
+      let notified = { student: false, teacher: false };
+      if (notifyStudent(notifyTarget) && stu?.user_phone_number) {
+        let txt = `تم تعديل نتيجة حفظك بتاريخ ${rowDate}: أصبح *${resultText}*.`;
+        if (cascaded) txt += `\nوقد تم تحديث حفظ الأيام التالية تلقائياً.`;
+        notified.student = await sendWaha(stu.user_phone_number, wrapMsg(A, txt));
+      }
+      if (notifyTeacher(notifyTarget) && tch?.phone_number) {
+        let txt = `تم تعديل نتيجة ${g(sg, "الطالب", "الطالبة")} *${stu?.full_name ?? ""}* بتاريخ ${rowDate}: أصبحت *${resultText}*.`;
+        if (cascaded) txt += `\nوقد تم تحديث حفظ الأيام التالية تلقائياً.`;
+        notified.teacher = await sendWaha(tch.phone_number, wrapMsg(A, txt));
+      }
+      await writeLog(A, `قيّم ${isExam ? "اختبار" : "صفحة"} ${g(sg, "الطالب", "الطالبة")} (${stu?.full_name ?? ""}) بتاريخ ${rowDate}. النتيجة: ${resultText}.${cascaded ? " وتمت إعادة مزامنة الصفوف التالية." : ""}`);
+      return jsonResponse({ error: false, result: resultText, notified, cascaded });
     }
 
     /* ── التحكم بالاختبار (تفعيل/إيقاف + تعيين مشرف) ─────────────── */

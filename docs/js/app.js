@@ -5,7 +5,7 @@ const APP = { admin: null, dash: null };
 
 const TITLES = {
   overview: 'النظرة العامة', students: 'الطلاب', teachers: 'المشرفون',
-  messages: 'الرسائل', otps: 'رموز الدخول', holidays: 'العطلات',
+  messages: 'الرسائل', otps: 'رموز الدخول', holidays: 'الإجازات',
   logs: 'سجل العمليات', admins: 'الإداريون', 'today-log': 'سجل الطلاب لليوم',
   'full-log': 'سجل الطلاب', 'add-student': 'إضافة طالب', 'add-teacher': 'إضافة مشرف',
 };
@@ -18,7 +18,7 @@ const NAV_ITEMS = [
   { id: 'teachers', label: 'المشرفون', ic: 'teacher' },
   { id: 'messages', label: 'الرسائل', ic: 'message' },
   { id: 'otps', label: 'رموز الدخول', ic: 'key' },
-  { id: 'holidays', label: 'العطلات', ic: 'holiday' },
+  { id: 'holidays', label: 'الإجازات', ic: 'holiday' },
   { id: 'logs', label: 'سجل العمليات', ic: 'logs' },
   { id: 'admins', label: 'الإداريون', ic: 'admins', ownerOnly: true },
 ];
@@ -188,10 +188,10 @@ function pageOverview() {
   const cards = [
     statCard('students', s.students_total, 'إجمالي الطلاب'),
     statCard('teacher', s.teachers_total, 'المشرفون'),
-    statCard('check', s.active_saves, 'حفظات نشطة'),
+    statCard('check', s.active_saves, 'عمليات حفظ نشطة'),
     statCard('exam', s.in_exam, 'في الاختبار'),
-    statCard('star', s.finished_saves, 'حفظات مكتملة'),
-    statCard('ban', s.suspended_saves, 'حفظات موقوفة'),
+    statCard('star', s.finished_saves, 'عمليات حفظ مكتملة'),
+    statCard('ban', s.suspended_saves, 'عمليات حفظ موقوفة'),
     statCard('clock', s.not_joined, 'لم ينضمّوا بعد'),
     statCard('alert', s.profile_incomplete, 'ملفات ناقصة'),
     statCard('holiday', s.with_absence, 'لديهم غياب'),
@@ -218,7 +218,7 @@ const stFilters = { status: 'all', gender: 'all', q: '', sort: 'name' };
 const ST_STATUS = [
   ['all', 'الكل'], ['active', 'نشط'], ['in_exam', 'في الاختبار'], ['finished', 'مكتمل'],
   ['suspended', 'موقوف'], ['terminated', 'منهي'], ['not_joined', 'لم ينضمّوا'],
-  ['no_save', 'بدون حفظة'], ['incomplete', 'ملف ناقص'], ['absence', 'لديهم غياب'],
+  ['no_save', 'بدون حفظ'], ['incomplete', 'ملف ناقص'], ['absence', 'لديهم غياب'],
 ];
 const ST_PRED = {
   active: s => s.save && s.save.status === 'ACTIVE',
@@ -287,7 +287,7 @@ function studentRow(s) {
   if (!s.joined) badges.push(UI.badge('gold', 'لم ينضمّ'));
   if (s.profile_incomplete) badges.push(UI.badge('red', 'ملف ناقص'));
   if (s.absence_total > 0) badges.push(UI.badge('gray', 'غياب ' + s.absence_total));
-  const statusB = s.save ? UI.badge('blue', s.save.status_label) : UI.badge('gray', 'بدون حفظة');
+  const statusB = s.save ? UI.badge('blue', s.save.status_label) : UI.badge('gray', 'بدون حفظ');
   const prog = s.save ? `<div class="progress-bar" style="width:150px"><div style="width:${s.save.progress_pct}%"></div></div>` : '';
   return `<div class="entity-card" onclick="location.hash='#/students/${UI.attr(s.user_id)}'">
     <div class="avatar">${icon('students', 20)}</div>
@@ -333,7 +333,7 @@ async function pageStudentDetail(id) {
     ['معرّف الطالب', UI.copyField(u.user_id)],
   ]);
 
-  const savesHtml = saves.length ? saves.map(saveBlock).join('') : `<div class="panel">${UI.empty('لا توجد حفظات لهذا الطالب', 'records')}</div>`;
+  const savesHtml = saves.length ? saves.map(saveBlock).join('') : `<div class="panel">${UI.empty('لا توجد سيرة حفظية لهذا الطالب', 'records')}</div>`;
 
   view().innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="history.back()" style="margin-bottom:14px">→ رجوع</button>
@@ -354,12 +354,12 @@ async function pageStudentDetail(id) {
       </div>
       ${info}
     </div>
-    <div class="panel-head" style="margin:18px 4px 12px"><h2>الحفظات (${saves.length})</h2></div>
+    <div class="panel-head" style="margin:18px 4px 12px"><h2>السيرة الحفظية (${saves.length})</h2></div>
     ${savesHtml}`;
 }
 
 function saveBlock(s) {
-  const cur = s.is_current ? UI.badge('green', 'الحفظة الحالية') : '';
+  const cur = s.is_current ? UI.badge('green', 'الحفظ الحالي') : '';
   const examInfo = (s.exam1 || s.exam2) ? `<div class="muted" style="font-size:12.5px;margin-top:6px">
     ${s.exam1 ? `جزئي: ${UI.esc(s.exam1_teacher_name)}` : ''} ${s.exam2 ? ` • تراكمي: ${UI.esc(s.exam2_teacher_name)}` : ''}</div>` : '';
   const grid = kvGrid([
@@ -373,7 +373,7 @@ function saveBlock(s) {
   const sid = UI.attr(String(s.id));
   return `<div class="panel">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <b style="font-size:15px">${UI.esc(s.name || 'حفظة')}</b>${cur}
+      <b style="font-size:15px">${UI.esc(s.name || 'حفظ')}</b>${cur}
       <span style="flex:1"></span>
       ${UI.badge('blue', s.progress_pct + '%')}
       ${s.status === 'ACTIVE' ? UI.badge('green', s.status_label) : s.status === 'SUSPENDED' ? UI.badge('red', s.status_label) : UI.badge('gray', s.status_label)}
@@ -475,7 +475,7 @@ function openSetPasswordModal(kind, id, name) {
 
 function openDeleteStudentModal() {
   const u = APP.current.user;
-  const body = `<p style="color:var(--red);font-weight:700;margin-bottom:14px">سيتم حذف الطالب <b>${UI.esc(u.full_name)}</b> نهائياً مع جميع حفظاته وصفحاته. هذا الإجراء لا يمكن التراجع عنه.</p>
+  const body = `<p style="color:var(--red);font-weight:700;margin-bottom:14px">سيتم حذف الطالب <b>${UI.esc(u.full_name)}</b> نهائياً مع كامل سيرته الحفظية وصفحاته. هذا الإجراء لا يمكن التراجع عنه.</p>
     ${fieldHtml('كلمة مرور حسابك للتأكيد', 'admin_password', '', 'password')}`;
   const foot = `<button class="btn btn-danger" id="md-ok">حذف نهائياً</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
   const m = UI.modal('حذف الطالب', body, foot);
@@ -493,7 +493,7 @@ function openAddSaveModal() {
   const activeSave = APP.current.saves.find(s => s.is_current && (s.status === 'ACTIVE' || s.status === 'SUSPENDED'));
   const warn = activeSave ? `<p style="color:var(--gold);margin-bottom:14px">${icon('alert', 14)} يوجد حفظ نشط حالياً (${UI.esc(activeSave.name)})، سيتم إنهاؤه تلقائياً عند إضافة حفظ جديد.</p>` : '';
   const body = `${warn}<div class="form-grid">
-    ${fieldHtml('اسم الحفظة', 'save_name', '')}
+    ${fieldHtml('اسم الحفظ', 'save_name', '')}
     ${selectHtml('المشرف', 'teacher_id', u.teacher_id, teacherOptions())}
     ${fieldHtml('من صفحة', 'start_page', '', 'number')}
     ${fieldHtml('إلى صفحة', 'end_page', '', 'number')}
@@ -519,12 +519,12 @@ function openEditSaveModal(saveId) {
     ${selectHtml('المشرف', 'teacher_id', s.teacher_id, tOpts)}
   </div>`;
   const foot = `<button class="btn btn-primary" id="md-ok">حفظ</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
-  const m = UI.modal('تعديل الحفظة', body, foot);
+  const m = UI.modal('تعديل الحفظ', body, foot);
   m.el.querySelector('#md-cancel').onclick = m.close;
   m.el.querySelector('#md-ok').onclick = async ev => {
     const f = collectFields(m.el);
     await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'update_save', save_id: s.id, fields: f }),
-      { okMsg: 'تم حفظ بيانات الحفظة', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
+      { okMsg: 'تم حفظ بيانات الحفظ', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
   };
 }
 
@@ -534,7 +534,7 @@ function openExamControlModal(saveId, type) {
   const enabled = isE2 ? s.exam2 : s.exam1;
   const curTeacher = isE2 ? s.exam2_teacher_id : s.exam1_teacher_id;
   const tOpts = [['', '— اختر مشرفاً —']].concat(teacherOptions());
-  const body = `<p class="muted" style="margin-bottom:14px">${isE2 ? 'الاختبار التراكمي (كامل الحفظ)' : 'الاختبار الجزئي'} للحفظة: <b>${UI.esc(s.name)}</b></p>
+  const body = `<p class="muted" style="margin-bottom:14px">${isE2 ? 'الاختبار التراكمي (كامل الحفظ)' : 'الاختبار الجزئي'} للحفظ: <b>${UI.esc(s.name)}</b></p>
     <div class="form-grid">
       ${selectHtml('الحالة', 'enable', String(enabled), [['true', 'مُفعّل'], ['false', 'مُوقَف']])}
       ${selectHtml('مشرف الاختبار', 'teacher_id', curTeacher || '', tOpts)}
@@ -813,18 +813,18 @@ function renderOtps(otps) {
     <tbody>${rows}</tbody></table></div>`;
 }
 
-/* ================= العطلات ================= */
+/* ================= الإجازات ================= */
 async function pageHolidays() {
   const isOwner = APP.admin.type === 'owner';
   view().innerHTML = `<div class="panel">
-    <div class="panel-head"><h2>العطلات</h2>${isOwner ? `<button class="btn btn-primary btn-sm" onclick="openAddHolidayModal()">${icon('plus', 14)} إضافة عطلة</button>` : ''}</div>
+    <div class="panel-head"><h2>الإجازات</h2>${isOwner ? `<button class="btn btn-primary btn-sm" onclick="openAddHolidayModal()">${icon('plus', 14)} إضافة إجازة</button>` : ''}</div>
     <div id="hol-wrap"><span class="spinner"></span></div>
   </div>`;
   let res;
   try { res = await TW.call('testweb_holidays', { action: 'list' }); }
   catch (e) { $('#hol-wrap').innerHTML = UI.errorBox(e.message); return; }
   const wrap = $('#hol-wrap');
-  if (!res.holidays.length) { wrap.innerHTML = UI.empty('لا عطلات مسجّلة', 'holiday'); return; }
+  if (!res.holidays.length) { wrap.innerHTML = UI.empty('لا إجازات مسجّلة', 'holiday'); return; }
   const typeLabel = { ALL: 'الجميع', FOR_USER: 'طالب', FOR_TEACHER: 'مشرف' };
   const rows = res.holidays.map(h => `<tr>
     <td><b>${UI.esc(h.target_name)}</b></td>
@@ -839,8 +839,8 @@ async function pageHolidays() {
     <tbody>${rows}</tbody></table></div>`;
 }
 async function deleteHoliday(id) {
-  if (!await UI.confirm('حذف عطلة', 'هل تريد حذف هذه العطلة؟', 'حذف')) return;
-  try { await TW.call('testweb_holidays', { action: 'delete', id }); UI.toast('تم حذف العطلة', 'ok'); pageHolidays(); }
+  if (!await UI.confirm('حذف إجازة', 'هل تريد حذف هذه الإجازة؟', 'حذف')) return;
+  try { await TW.call('testweb_holidays', { action: 'delete', id }); UI.toast('تم حذف الإجازة', 'ok'); pageHolidays(); }
   catch (e) { UI.toast(e.message, 'err'); }
 }
 function openAddHolidayModal() {
@@ -850,7 +850,7 @@ function openAddHolidayModal() {
   </div>
   <div id="hol-target" style="margin-top:10px"></div>`;
   const foot = `<button class="btn btn-primary" id="md-ok">إضافة</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
-  const m = UI.modal('إضافة عطلة', body, foot);
+  const m = UI.modal('إضافة إجازة', body, foot);
   m.el.querySelector('#md-cancel').onclick = m.close;
   const typeSel = m.el.querySelector('[data-k="type"]');
   const renderTarget = () => {
@@ -865,7 +865,7 @@ function openAddHolidayModal() {
     const f = collectFields(m.el);
     await runAction(ev.target, () => TW.call('testweb_holidays', {
       action: 'add', type: f.type, for_date: f.for_date, for_user_id: f.for_user_id || null, for_teacher_id: f.for_teacher_id || null,
-    }), { okMsg: 'تم إضافة العطلة', modal: m, refreshDash: false, after: () => pageHolidays() });
+    }), { okMsg: 'تم إضافة الإجازة', modal: m, refreshDash: false, after: () => pageHolidays() });
   };
 }
 function baghdadDateStr(offsetDays = 0) {
@@ -960,7 +960,7 @@ function recordsTable(rows) {
     <td class="muted">${UI.esc(r.sowad)}</td><td class="muted">${UI.esc(r.nisyan)}</td><td class="muted">${UI.esc(r.fateh)}</td>
   </tr>`).join('');
   return `<div class="tbl-wrap"><table>
-    <thead><tr><th>التاريخ</th><th>الطالب</th><th>المشرف</th><th>الحفظة</th><th>الصفحة/النوع</th><th>الحالة</th><th>تسويد</th><th>نسيان</th><th>فتح</th></tr></thead>
+    <thead><tr><th>التاريخ</th><th>الطالب</th><th>المشرف</th><th>الحفظ</th><th>الصفحة/النوع</th><th>الحالة</th><th>تسويد</th><th>نسيان</th><th>فتح</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
 }
 
@@ -1013,7 +1013,7 @@ async function pageFullLogStudent(userId) {
 
 function exportRowsToExcel(rows, title, fileName) {
   if (!window.XLSX) { UI.toast('مكتبة التصدير غير متوفرة', 'err'); return; }
-  const headers = ['التاريخ', 'الطالب', 'المشرف', 'الحفظة', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح'];
+  const headers = ['التاريخ', 'الطالب', 'المشرف', 'الحفظ', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح'];
   const aoa = [[title], [`عدد الصفوف: ${rows.length} — ${new Date().toLocaleString('ar-EG')}`], [], headers];
   rows.forEach(r => aoa.push([UI.fmtDateShort(r.date), r.student_name, r.teacher_name, r.save_name, r.page_label, r.status_label, r.sowad, r.nisyan, r.fateh]));
   const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -1031,7 +1031,7 @@ async function exportAllStudents() {
     res.students.forEach(st => {
       let name = (st.student_name || 'طالب').replace(/[\\/?*\[\]:]/g, '').slice(0, 28) || 'طالب';
       const base = name; let i = 1; while (used.has(name)) name = `${base}_${i++}`; used.add(name);
-      const aoa = [[st.student_name], [], ['التاريخ', 'المشرف', 'الحفظة', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح']];
+      const aoa = [[st.student_name], [], ['التاريخ', 'المشرف', 'الحفظ', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح']];
       st.rows.forEach(r => aoa.push([UI.fmtDateShort(r.date), r.teacher_name, r.save_name, r.page_label, r.status_label, r.sowad, r.nisyan, r.fateh]));
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       XLSX.utils.book_append_sheet(wb, ws, name);
@@ -1049,7 +1049,7 @@ function pageAddStudent() {
       ${fieldHtml('رقم الهاتف', 'phone', '', 'tel')}
       ${selectHtml('الجنس', 'gender', 'male', [['male', 'ذكر'], ['female', 'أنثى']])}
       ${selectHtml('المشرف', 'teacher_id', '', [['', '— اختر مشرفاً —']].concat(teacherOptions()))}
-      ${fieldHtml('اسم الحفظة', 'save_name', '')}
+      ${fieldHtml('اسم الحفظ', 'save_name', '')}
       ${fieldHtml('من صفحة', 'start_page', '', 'number')}
       ${fieldHtml('إلى صفحة', 'end_page', '', 'number')}
       ${fieldHtml('الورد اليومي', 'every_day_page', '1', 'number')}

@@ -117,8 +117,8 @@ export function adminTitle(admin: Admin): string {
 }
 
 // أول سطر يُضاف لكل رسالة واتساب صادرة من اللوحة
-export function senderLine(admin: Admin): string {
-  return `المرسل: ${adminTitle(admin)} ${admin.name ?? ""}`;
+export function senderLine(_admin: Admin): string {
+  return `المرسل: إدارة مركز مشروع التحفيظ`;
 }
 
 export function autoReplyFooter(): string {

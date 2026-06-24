@@ -353,6 +353,7 @@ Deno.serve(async (req: Request) => {
         user_id: userId, full_name: fullName, user_phone_number: userPhone, email,
         password: basePassword, teacher_id: teacher.teacher_id, gender,
         added_admin_phone_number: myPhone, edited_admin_phone_number: myPhone, save_id: saveRow.id,
+        absence: { total: 0, last_check: 0, last_stopped_at: 0, stopped_abs_total: 0 },
       });
       if (userErr) {
         await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => {});
@@ -446,13 +447,14 @@ Deno.serve(async (req: Request) => {
         email, password: basePassword + SYSTEM_KEY, email_confirm: true,
       });
       if (authErr || !authData?.user?.id) return jsonResponse({ error: true, errors: authErr?.message ?? "فشل إنشاء الحساب" }, 400);
+      const teacherAuthId = authData.user.id;
 
       const { data: teacherRow, error: tErr } = await supabaseAdmin.from("teachers").insert({
-        full_name: fullName, phone_number: teacherPhone, email, password: basePassword,
+        teacher_id: teacherAuthId, full_name: fullName, phone_number: teacherPhone, email, password: basePassword,
         gender, joined: false,
       }).select("teacher_id").single();
       if (tErr || !teacherRow) {
-        await supabaseAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {});
+        await supabaseAdmin.auth.admin.deleteUser(teacherAuthId).catch(() => {});
         return jsonResponse({ error: true, errors: tErr?.message ?? "فشل إضافة المشرف" }, 400);
       }
 

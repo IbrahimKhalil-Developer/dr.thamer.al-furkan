@@ -40,14 +40,14 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: false, holidays: list });
     }
 
-    /* ── إضافة عطلة (للجميع / لطالب / لمشرف) ─────────────────────── */
+    /* ── إضافة إجازة (للجميع / لطالب / لمشرف) ─────────────────────── */
     if (action === "add") {
       const r = requireOwner(A); if (r) return r;
       const type = String(body?.type ?? "");
       const forDate = String(body?.for_date ?? "");
       const forUserId = body?.for_user_id ? String(body.for_user_id) : null;
       const forTeacherId = body?.for_teacher_id ? String(body.for_teacher_id) : null;
-      if (!["ALL", "FOR_USER", "FOR_TEACHER"].includes(type)) return jsonResponse({ error: true, errors: "نوع العطلة غير صحيح" }, 400);
+      if (!["ALL", "FOR_USER", "FOR_TEACHER"].includes(type)) return jsonResponse({ error: true, errors: "نوع الإجازة غير صحيح" }, 400);
       if (!forDate) return jsonResponse({ error: true, errors: "التاريخ مطلوب" }, 400);
       const today = baghdadDate(0);
       if (forDate < today) return jsonResponse({ error: true, errors: "لا يمكن منح إجازة لتاريخ ماضٍ." }, 400);
@@ -121,7 +121,7 @@ Deno.serve(async (req: Request) => {
         if (targetName) await supabaseAdmin.from("holidays").update({ target_name: targetName }).eq("id", row.id);
       }
 
-      await writeLog(A, `أضاف عطلة (${type === "ALL" ? "للجميع" : targetName}) بتاريخ ${forDate}.`);
+      await writeLog(A, `أضاف إجازة (${type === "ALL" ? "للجميع" : targetName}) بتاريخ ${forDate}.`);
       return jsonResponse({ error: false, id: row.id });
     }
 
@@ -132,7 +132,7 @@ Deno.serve(async (req: Request) => {
       const { data: h } = await supabaseAdmin.from("holidays").select("processed").eq("id", id).maybeSingle();
       if (h?.processed === true) return jsonResponse({ error: true, errors: "لا يمكن حذف إجازة تم تنفيذها." }, 400);
       await supabaseAdmin.from("holidays").delete().eq("id", id);
-      await writeLog(A, `حذف عطلة (${id}).`);
+      await writeLog(A, `حذف إجازة (${id}).`);
       return jsonResponse({ error: false });
     }
 

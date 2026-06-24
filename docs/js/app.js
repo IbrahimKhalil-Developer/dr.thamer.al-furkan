@@ -1031,6 +1031,7 @@ function toggleLogMsg(id) {
 }
 
 /* ================= الإداريون (مالك فقط) ================= */
+let adminsHasOwner = false; // يوجد مسؤول إداري (owner) واحد فقط في النظام
 async function pageAdmins() {
   view().innerHTML = `<div class="panel">
     <div class="panel-head"><h2>الحسابات الإدارية</h2><button class="btn btn-primary btn-sm" onclick="openAdminFormModal()">${icon('plus', 14)} إضافة حساب</button></div>
@@ -1039,6 +1040,7 @@ async function pageAdmins() {
   let res;
   try { res = await TW.call('testweb_admins', { action: 'list' }); }
   catch (e) { $('#admins-wrap').innerHTML = UI.errorBox(e.message); return; }
+  adminsHasOwner = res.admins.some(a => a.type === 'owner');
   const wrap = $('#admins-wrap');
   const rows = res.admins.map(a => `<tr>
     <td><b>${UI.esc(a.name)}</b>${a.is_self ? ' <span class="muted">(أنتَ)</span>' : ''}</td>
@@ -1069,7 +1071,10 @@ function openAdminFormModal(admin) {
     ${fieldHtml('رقم الهاتف', 'phone', admin?.phone)}
     ${isEdit ? '' : fieldHtml('البريد الإلكتروني', 'email', '', 'email')}
     ${selectHtml('الجنس', 'gender', admin?.gender || 'male', [['male', 'ذكر'], ['female', 'أنثى']])}
-    ${selectHtml('الصلاحية', 'type', admin?.type || 'admin', [['admin', 'إداري'], ['owner', 'مسؤول إداري']])}
+    ${(admin?.type === 'owner')
+      ? `<div class="field"><label>الصلاحية</label><input class="f-input" value="مسؤول إداري" disabled><input class="f-input" data-k="type" type="hidden" value="owner"></div>`
+      : selectHtml('الصلاحية', 'type', admin?.type || 'admin',
+          adminsHasOwner ? [['admin', 'إداري']] : [['admin', 'إداري'], ['owner', 'مسؤول إداري']])}
     ${fieldHtml(isEdit ? 'كلمة مرور جديدة (اختياري)' : 'كلمة المرور', 'password', '', 'password')}
   </div>`;
   const foot = `<button class="btn btn-primary" id="md-ok">${isEdit ? 'حفظ التعديلات' : 'إضافة'}</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;

@@ -45,6 +45,14 @@ Deno.serve(async (req: Request) => {
       const gender = f.gender === "female" ? "female" : "male";
       if (!name || !phone || !email || !password) return jsonResponse({ error: true, errors: "جميع الحقول مطلوبة" }, 400);
 
+      // يوجد مسؤول إداري (owner) واحد فقط في كل النظام — يُمنع إضافة ثانٍ
+      if (type === "owner") {
+        const { count } = await supabaseAdmin.from("admins").select("id", { count: "exact", head: true }).eq("type", "owner");
+        if ((count ?? 0) > 0) {
+          return jsonResponse({ error: true, errors: "يوجد مسؤول إداري واحد فقط مسموح به في النظام، لا يمكن إضافة مسؤول إداري آخر." }, 403);
+        }
+      }
+
       const { data: row, error } = await supabaseAdmin.from("admins").insert({
         name, phone_number: normalizePhone(phone), email, password, type, gender, active: true,
       }).select("id").single();
@@ -62,6 +70,14 @@ Deno.serve(async (req: Request) => {
 
       const { data: target } = await supabaseAdmin.from("admins").select("email, type").eq("id", id).maybeSingle();
       if (!target) return jsonResponse({ error: true, errors: "الحساب غير موجود" }, 404);
+
+      // يوجد مسؤول إداري (owner) واحد فقط — يُمنع ترفيع أي حساب آخر إلى هذه الرتبة
+      if (f.type === "owner" && target.type !== "owner") {
+        const { count } = await supabaseAdmin.from("admins").select("id", { count: "exact", head: true }).eq("type", "owner");
+        if ((count ?? 0) > 0) {
+          return jsonResponse({ error: true, errors: "يوجد مسؤول إداري واحد فقط مسموح به في النظام، لا يمكن ترفيع حساب آخر لهذه الرتبة." }, 403);
+        }
+      }
 
       const patch: Record<string, any> = {};
       if (f.name != null) patch.name = String(f.name).trim();

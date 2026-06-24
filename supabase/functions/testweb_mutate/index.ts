@@ -1,5 +1,5 @@
 import {
-  supabaseAdmin, requireAdmin, SYSTEM_KEY, jsonResponse, preflight,
+  supabaseAdmin, requireAdmin, requireOwner, SYSTEM_KEY, jsonResponse, preflight,
   sendWaha, wrapMsg, writeLog, g, toLocalPhone, normalizePhone, nowIso, baghdadDate,
 } from "../_shared/guard.ts";
 
@@ -147,6 +147,9 @@ Deno.serve(async (req: Request) => {
         password = String(t.password ?? ""); phone = String(t.phone_number ?? "");
         targetGender = t.gender ?? "male"; who = t.full_name ?? "";
       } else if (kind === "admin") {
+        // إدارة الحسابات الإدارية متاحة للمسؤول الإداري (owner) فقط
+        const ownerErr = requireOwner(A);
+        if (ownerErr) return ownerErr;
         const { data: ad } = await supabaseAdmin.from("admins")
           .select("name, gender, password, phone_number").eq("id", id).maybeSingle();
         if (!ad) return jsonResponse({ error: true, errors: "الحساب الإداري غير موجود" }, 404);

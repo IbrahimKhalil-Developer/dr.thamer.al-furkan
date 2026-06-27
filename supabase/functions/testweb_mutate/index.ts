@@ -68,6 +68,37 @@ function stateLabel(state: string, isFU: boolean, iFT: boolean): string {
 }
 const num = (v: any) => Math.max(0, Math.min(999, Number(v) || 0));
 
+// رسالة "حفظ اليوم" للطالب — تُرسل عند إعادة بناء الصف الحالي أو إعادة الحفظ من اللوحة.
+// مطابقة لرسالة أول صف في pages_system لكن بصيغة "حفظ اليوم" بدل "حفظ الغد".
+function msgTodayRowStudent(saveName: string, fullName: string, gender: string, pageDisp: string, phoneLocal: string): string {
+  const SEP = "─────────────────";
+  const FOOTER = "_مع أطيب تحيات مركز الشيخ الدكتور *عمر الصميدعي* رحمه الله_";
+  return [
+    `📖 *مرحباً ${g(gender, "بكَ", "بكِ")} في مشروع التحفيظ المُتقِن*`, ``,
+    `👤 ${g(gender, "الطالب", "الطالبة")}: *${fullName}*`, ``,
+    SEP,
+    `تفاصيل ${g(gender, "حفظكَ", "حفظكِ")} لهذا اليوم:`,
+    `📚 الحفظ: *${saveName}*`,
+    `📝 حفظ اليوم: *${pageDisp}*`,
+    SEP, ``,
+    `للإستعداد يجب الإنضمام إلى تطبيق تحفيظ`,
+    `طريقة الدخول:`,
+    `1- تحميل التطبيق من الرابط`,
+    `2- الضغط على تسجيل الدخول ووضع رقم الهاتف الذي ${g(gender, "قمتَ", "قمتِ")} برفعه في الإستمارة والذي هو *${phoneLocal}*`,
+    `3- إدخال رمز التحقق الذي ${g(gender, "سيصلكَ", "سيصلكِ")} على واتساب`,
+    `4- الضغط على السماح بالوصول للموقع`,
+    `5- ملء الحقول المطلوبة بشكل صحيح`, ``,
+    `رابط تحميل التطبيق: https://www.mediafire.com/file/ohjf0rft0dia0z4/تحفيظ+للطلاب.apk/file`, ``,
+    `خطوات التثبيت:`,
+    `1- فتح الرابط`,
+    `2- الضغط على المستطيل الأزرق`,
+    `3- الضغط على "تثبيت على أي حال"`, ``,
+    `ملاحظة: في حال ظهور جمل مثل "تطبيق غير آمن"، "تطبيق غير معروف"، أو "يشكل خطر ما"، لا مشكلة، قم بتخطي الأمر وإكمال عملية التثبيت، فسبب هذه التنبيهات أن التطبيق لم يتم رفعه على متجر Play إلى الآن.`,
+    `في حال حدوث أي خطأ يرجى إرسال رسالة فورية بالخطأ لرقم هاتف الواتساب: 07783922919`,
+    SEP, ``, FOOTER,
+  ].join("\n");
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return preflight();
   if (req.method !== "POST") return jsonResponse({ error: true, errors: "الطريقة غير مسموح بها" }, 405);
@@ -193,6 +224,9 @@ Deno.serve(async (req: Request) => {
       if (!saveId) return jsonResponse({ error: true, errors: "save_id مطلوب" }, 400);
 
       const notifyTarget = resolveNotifyTarget(body);
+      // إشعار الطالب عند تعديلات الصفحات (نهاية/الصفحة الحالية/إعادة الحفظ) — صامت افتراضياً
+      const notifyStudentEdit = body?.notify_student === true;
+      const reset = body?.reset === true;
 
       const { data: save } = await supabaseAdmin.from("users_saves").select("*").eq("id", saveId).maybeSingle();
       if (!save) return jsonResponse({ error: true, errors: "الحفظ غير موجود" }, 404);
@@ -201,13 +235,22 @@ Deno.serve(async (req: Request) => {
         .select("full_name, gender, user_phone_number").eq("user_id", save.user_id).maybeSingle();
       const isFU = stu?.gender === "female";
       const sg = stu?.gender;
+      const edp = Math.max(1, Math.ceil(Number(save.every_day_page) || 1));
+      const today = baghdadDate(0);
       const patch: Record<string, any> = {};
       const notes: string[] = [];
 
-      // إلى الصفحة فقط (صفحة البداية محميّة)
+      // صفحة البداية (قابلة للتعديل) — لا تُرسل أي إشعار للطالب عند تعديلها
+      let effStart = Number(save.start_page);
+      if (f.start_page != null && f.start_page !== "") {
+        const sp = Number(f.start_page);
+        if (sp > 0 && sp !== effStart) { patch.start_page = sp; notes.push(`صفحة البداية: "${save.start_page}" ← "${sp}"`); effStart = sp; }
+      }
+
+      // إلى الصفحة (نهاية الحفظ)
       if (f.end_page != null && f.end_page !== "") {
         const ep = Number(f.end_page);
-        if (ep > Number(save.start_page)) { patch.end_page = ep; notes.push(`إلى الصفحة ${ep}`); }
+        if (ep > effStart && ep !== Number(save.end_page)) { patch.end_page = ep; notes.push(`نهاية الحفظ: "${save.end_page}" ← "${ep}"`); }
       }
 
       // ── تغيير حالة الحفظ: ثلاث حالات + رسائل كاملة ──────────────────
@@ -304,9 +347,66 @@ Deno.serve(async (req: Request) => {
         notes.push(`المشرف: "${oldT?.full_name ?? "—"}" ← "${newT.full_name}"`);
       }
 
-      if (!Object.keys(patch).length) return jsonResponse({ error: true, errors: "لا توجد تعديلات" }, 400);
-      const { error } = await supabaseAdmin.from("users_saves").update(patch).eq("id", saveId);
-      if (error) return jsonResponse({ error: true, errors: error.message }, 400);
+      // ── إعادة بناء الصفوف: إعادة الحفظ (reset) أو تعديل الصفحة الحالية (page_current) ──
+      // reset: حذف كل صفوف users_pages وإرجاع page_current إلى صفحة البداية وإنشاء صف أول جديد.
+      // page_current: حذف الصفوف التي page >= الحد (الصفحة المُدخلة + edp - 1) وإعادة بناء الصف الحالي not_ready.
+      let didRebuild = false;
+      let rebuildPage = 0;       // قيمة عمود page للصف الجديد
+      let rebuildDisp = "";      // MePageArabic للصف الجديد
+      if (reset) {
+        await supabaseAdmin.from("users_pages").delete().eq("save_id", saveId);
+        patch.page_current = effStart;
+        rebuildPage = effStart + edp - 1;
+        rebuildDisp = buildPageDisplay(rebuildPage, edp);
+        didRebuild = true;
+        notes.push("إعادة الحفظ من البداية");
+      } else if (f.page_current != null && f.page_current !== "") {
+        const nc = Number(f.page_current);
+        if (!(nc > 0)) return jsonResponse({ error: true, errors: "قيمة الصفحة الحالية غير صحيحة" }, 400);
+        if (nc < effStart) return jsonResponse({ error: true, errors: "الصفحة الحالية يجب ألا تقل عن صفحة البداية." }, 400);
+        rebuildPage = nc + edp - 1;
+        await supabaseAdmin.from("users_pages").delete().eq("save_id", saveId).gte("page", rebuildPage);
+        patch.page_current = nc;
+        rebuildDisp = buildPageDisplay(rebuildPage, edp);
+        didRebuild = true;
+        notes.push(`الصفحة الحالية: "${save.page_current ?? "—"}" ← "${nc}"`);
+      }
+
+      if (!Object.keys(patch).length && !didRebuild) return jsonResponse({ error: true, errors: "لا توجد تعديلات" }, 400);
+      if (Object.keys(patch).length) {
+        const { error } = await supabaseAdmin.from("users_saves").update(patch).eq("id", saveId);
+        if (error) return jsonResponse({ error: true, errors: error.message }, 400);
+      }
+
+      // إنشاء الصف الجديد بعد تحديث بيانات الحفظ (للحالتين: reset / page_current)
+      if (didRebuild) {
+        const tId = patch.teacher_id ?? save.teacher_id ?? null;
+        const tName = patch.teacher_name ?? save.teacher_name ?? "";
+        let tPhoto = "";
+        if (tId) {
+          const { data: tRec } = await supabaseAdmin.from("teachers").select("photo_url").eq("teacher_id", tId).maybeSingle();
+          tPhoto = tRec?.photo_url ?? "";
+        }
+        await supabaseAdmin.from("users_pages").insert([{
+          user_id: save.user_id, save_id: saveId,
+          teacher_id: tId, teacher_name: tName, teacher_photo: tPhoto,
+          status: "not_ready", page_status: "not_ready",
+          takeem: null, takeem_status: null,
+          errors_number: { sowad: 0, nisyan: 0 },
+          created_at: nowIso(),
+          page: rebuildPage, MePageArabic: rebuildDisp,
+          date: today,
+        }]);
+        // إشعار الطالب — فقط عند تفعيل الخيار، بنفس رسالة أول صف لكن بصيغة "حفظ اليوم"
+        if (notifyStudentEdit && stu?.user_phone_number) {
+          await sendWaha(stu.user_phone_number, msgTodayRowStudent(save.name ?? "", stu.full_name ?? "", String(sg ?? "male"), rebuildDisp, toLocalPhone(stu.user_phone_number)));
+        }
+      } else if (notifyStudentEdit && patch.end_page != null && stu?.user_phone_number) {
+        // إشعار تعديل نهاية الحفظ (عند تفعيل الخيار فقط)
+        const txt = `تم تعديل نهاية ${g(sg, "حفظكَ", "حفظكِ")} (*${save.name}*) إلى الصفحة *${patch.end_page}*.`;
+        await sendWaha(stu.user_phone_number, wrapMsg(A, txt));
+      }
+
       await writeLog(A, `عدّل حفظ (${save.name}) للطالب (${stu?.full_name ?? save.user_id}): ${notes.join("، ")}.`);
       return jsonResponse({ error: false });
     }

@@ -982,10 +982,13 @@ Deno.serve(async (req: Request) => {
           // ── لا يوجد صف — حفظ جديد بدون سجل ─────────────────────────────
           if (!lastRow) {
             const firstPage    = edp < 1 ? 1 : Math.ceil(edp);
-            const firstPageNum = Number(saveRow.start_page) + firstPage - 1;
+            // نعتمد على الصفحة الحالية (page_current) لا على start_page
+            const baseCur      = Number(saveRow.page_current ?? saveRow.start_page);
+            const firstPageNum = baseCur + firstPage - 1;
             const pageDisp     = buildPageDisplay(firstPageNum, edp);
             await createPageRow(supabase, userId, saveId, teacherId, tRec?.full_name ?? "", tRec?.photo_url ?? "", firstPageNum, edp,
               { status: newSt, page_status: newSt, date: tomorrow, MePageArabic: pageDisp });
+            await supabase.from("users_saves").update({ page_current: firstPageNum - Math.ceil(edp) + 1 }).eq("id", saveId);
             await waha(user.user_phone_number, msgNewSaveStudent(saveName, user.full_name, isFU, pageDisp, convertPhone(user.user_phone_number)));
             continue;
           }
@@ -1000,6 +1003,7 @@ Deno.serve(async (req: Request) => {
             const pageDisp = buildPageDisplay(nextPage, edp);
             await createPageRow(supabase, userId, saveId, teacherId, tRec?.full_name ?? "", tRec?.photo_url ?? "", nextPage, edp,
               { status: newSt, page_status: newSt, date: tomorrow, MePageArabic: pageDisp });
+            await supabase.from("users_saves").update({ page_current: nextPage - Math.ceil(edp) + 1 }).eq("id", saveId);
             await waha(user.user_phone_number, msgResumeStudent(saveName, user.full_name, isFU, pageDisp));
             if (tPhone) await waha(tPhone, msgResumeTeacher(saveName, user.full_name, isFU, iFT));
             adminSummary.push({ studentName: user.full_name, teacherName: tRec?.full_name ?? "", typeLabel: "حفظي",
@@ -1163,6 +1167,8 @@ Deno.serve(async (req: Request) => {
 
           await createPageRow(supabase, userId, saveId, teacherId, tRec?.full_name ?? "", tRec?.photo_url ?? "",
             nextPageToAdd, edp, { status: newSt, page_status: newSt, date: tomorrow, MePageArabic: mePageArabic });
+          // تحديث الصفحة الحالية = أول صفحة من نطاق الصف الجديد
+          await supabase.from("users_saves").update({ page_current: nextPageToAdd - Math.ceil(edp) + 1 }).eq("id", saveId);
 
         // ════════════════════════════════════════════════════════
         //  IN_EXAM1 / IN_EXAM2

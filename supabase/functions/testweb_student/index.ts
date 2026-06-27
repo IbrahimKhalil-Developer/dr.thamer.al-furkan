@@ -161,6 +161,7 @@ Deno.serve(async (req: Request) => {
         status_reason: s.status_reason ?? "", old_status: s.old_status ?? "",
         teacher_id: s.teacher_id ?? "", teacher_name: s.teacher_name ?? "—",
         start_page: s.start_page ?? null, end_page: s.end_page ?? null,
+        page_current: s.page_current ?? null,
         every_day_page: s.every_day_page ?? null,
         started_at: s.started_at ?? null, finished_at: s.finished_at ?? null,
         exam1: s.exam1 === true, exam2: s.exam2 === true,

@@ -599,20 +599,31 @@ function openEditSaveModal(saveId) {
        <p class="muted" style="margin-top:4px;color:var(--danger,#e55)">هذا الحفظ منهي نهائياً ولا يمكن إعادة تفعيله إلا من قبل المطوّر.</p></div>`
     : selectHtml('الحالة', 'status', s.status, [['ACTIVE', 'نشط'], ['SUSPENDED', 'موقوف مؤقتاً'], ['TERMINATED', 'إلغاء الحفظ نهائياً']]);
   const body = `<div class="form-grid">
-    ${fieldHtml('إلى صفحة', 'end_page', s.end_page, 'number')}
+    ${fieldHtml('من صفحة (البداية)', 'start_page', s.start_page, 'number')}
+    ${fieldHtml('إلى صفحة (النهاية)', 'end_page', s.end_page, 'number')}
+    ${fieldHtml('الصفحة الحالية', 'page_current', s.page_current, 'number')}
     ${statusField}
     ${selectHtml('المشرف', 'teacher_id', s.teacher_id, tOpts)}
-    ${selectHtml('الإبلاغ', 'notify_target', 'both', NOTIFY_OPTS)}
+    ${selectHtml('الإبلاغ (الحالة/المشرف)', 'notify_target', 'both', NOTIFY_OPTS)}
   </div>
+  <p class="muted" style="margin-top:6px">تعديل «الصفحة الحالية» يحذف صفوف الأيام الأحدث ويعيد بناء صف اليوم للمراجعة. «من صفحة» لا يُرسل أي إشعار.</p>
+  <div class="field"><label><input type="checkbox" id="es-reset" style="width:auto;margin-left:6px">إعادة الحفظ من البداية (حذف كل صفوف الحفظ وبدء صف اليوم من صفحة البداية)</label></div>
+  <div class="field"><label><input type="checkbox" id="es-notify" style="width:auto;margin-left:6px">إرسال إشعار للطالب بالتعديل (مطفأ افتراضياً)</label></div>
   ${textareaHtml('سبب التعديل (اختياري)', 'status_reason', '', 'سبب التعديل أو التوقيف...')}`;
   const foot = `<button class="btn btn-primary" id="md-ok">حفظ</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
   const m = UI.modal('تعديل الحفظ', body, foot);
   m.el.querySelector('#md-cancel').onclick = m.close;
   m.el.querySelector('#md-ok').onclick = async ev => {
     const f = collectFields(m.el);
+    const reset = m.el.querySelector('#es-reset')?.checked === true;
+    const notify_student = m.el.querySelector('#es-notify')?.checked === true;
     const notify_target = f.notify_target;
+    if (reset && !confirm('إعادة الحفظ ستحذف كل صفوف هذا الحفظ نهائياً وتبدأ من صفحة البداية. متابعة؟')) return;
     const fields = { end_page: f.end_page, status: f.status, teacher_id: f.teacher_id, status_reason: f.status_reason || '' };
-    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'update_save', save_id: s.id, fields, notify_target }),
+    // أرسل صفحة البداية/الحالية فقط عند تغييرها فعلياً (تجنّب إعادة بناء غير مقصودة)
+    if (String(f.start_page) !== String(s.start_page ?? '')) fields.start_page = f.start_page;
+    if (!reset && String(f.page_current) !== String(s.page_current ?? '')) fields.page_current = f.page_current;
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'update_save', save_id: s.id, fields, notify_target, notify_student, reset }),
       { okMsg: 'تم حفظ بيانات الحفظ', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
   };
 }

@@ -224,9 +224,8 @@ Deno.serve(async (req: Request) => {
       if (!saveId) return jsonResponse({ error: true, errors: "save_id مطلوب" }, 400);
 
       const notifyTarget = resolveNotifyTarget(body);
-      // إشعار الطالب عند تعديلات الصفحات (نهاية/الصفحة الحالية/إعادة الحفظ) — صامت افتراضياً
+      // إشعار الطالب عند تعديلات الصفحات (نهاية/الصفحة الحالية) — صامت افتراضياً
       const notifyStudentEdit = body?.notify_student === true;
-      const reset = body?.reset === true;
 
       const { data: save } = await supabaseAdmin.from("users_saves").select("*").eq("id", saveId).maybeSingle();
       if (!save) return jsonResponse({ error: true, errors: "الحفظ غير موجود" }, 404);
@@ -347,22 +346,14 @@ Deno.serve(async (req: Request) => {
         notes.push(`المشرف: "${oldT?.full_name ?? "—"}" ← "${newT.full_name}"`);
       }
 
-      // ── إعادة بناء الصفوف: إعادة الحفظ (reset) أو تعديل الصفحة الحالية (page_current) ──
-      // reset: حذف كل صفوف users_pages وإرجاع page_current إلى صفحة البداية وإنشاء صف أول جديد.
-      // page_current: القيمة المُدخلة = قيمة عمود page لصف موجود مباشرةً (كآخر صف ناجح).
+      // ── إعادة بناء صف الصفحة الحالية (page_current) ──
+      // القيمة المُدخلة = قيمة عمود page لصف موجود مباشرةً (كآخر صف ناجح).
       // نحذف الصفوف التي page >= القيمة المُدخلة، ونعيد بناء ذلك الصف not_ready للمراجعة.
+      // (تصفير الحفظ بالكامل له إجراء منفصل: rebuild_save)
       let didRebuild = false;
       let rebuildPage = 0;       // قيمة عمود page للصف الجديد
       let rebuildDisp = "";      // MePageArabic للصف الجديد
-      if (reset) {
-        // إعادة الحفظ: page_current = صفحة البداية، وأول صف كما في pages_system = start_page + edp - 1
-        await supabaseAdmin.from("users_pages").delete().eq("save_id", saveId);
-        patch.page_current = effStart;
-        rebuildPage = effStart + edp - 1;
-        rebuildDisp = buildPageDisplay(rebuildPage, edp);
-        didRebuild = true;
-        notes.push("إعادة الحفظ من البداية");
-      } else if (f.page_current != null && f.page_current !== "") {
+      if (f.page_current != null && f.page_current !== "") {
         const nc = Number(f.page_current);
         if (!(nc > 0)) return jsonResponse({ error: true, errors: "قيمة الصفحة الحالية غير صحيحة" }, 400);
         if (nc < effStart) return jsonResponse({ error: true, errors: "الصفحة الحالية يجب ألا تقل عن صفحة البداية." }, 400);
@@ -381,7 +372,7 @@ Deno.serve(async (req: Request) => {
         if (error) return jsonResponse({ error: true, errors: error.message }, 400);
       }
 
-      // إنشاء الصف الجديد بعد تحديث بيانات الحفظ (للحالتين: reset / page_current)
+      // إنشاء الصف الجديد بعد تحديث بيانات الحفظ (تعديل الصفحة الحالية)
       if (didRebuild) {
         const tId = patch.teacher_id ?? save.teacher_id ?? null;
         const tName = patch.teacher_name ?? save.teacher_name ?? "";

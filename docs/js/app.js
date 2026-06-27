@@ -676,6 +676,7 @@ function openGradeModal(table, rowId, isExam, isOld) {
     : `<p class="muted" style="margin-bottom:14px">اختر نتيجة التقييم، وسيُرسل إشعار للطالب ومشرفه تلقائياً.</p>`;
   const body = `${oldNote}
     <div class="form-grid">${fieldHtml('التسويد (0-999)', 'sowad', 0, 'number')}${fieldHtml('النسيان (0-999)', 'nisyan', 0, 'number')}${isExam ? fieldHtml('الفتح (0-999)', 'fateh', 0, 'number') : ''}</div>
+    <div class="form-grid">${fieldHtml('مقدار المراجعة (اختياري)', 'takeem', '', 'text')}${selectHtml('تقييم المراجعة', 'takeem_status', '', [['', '—'], ['perfect', 'مُتقِن'], ['good', 'جيد جداً'], ['very_good', 'إمتياز'], ['reject', 'رسوب']])}</div>
     ${textareaHtml('ملاحظة (اختياري)', 'custom_info_text', '', 'ملاحظة تظهر للطالب...')}
     ${selectHtml('الإبلاغ', 'notify_target', 'both', NOTIFY_OPTS)}
     <div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span class="muted">التقدير المتوقّع:</span><span id="g-pv">—</span></div>`;
@@ -700,6 +701,7 @@ function openGradeModal(table, rowId, isExam, isOld) {
     const payload = {
       action: 'grade_page', table, row_id: rowId, state: 'finished',
       sowad: +g.sowad || 0, nisyan: +g.nisyan || 0, fateh: +g.fateh || 0,
+      takeem: g.takeem || '', takeem_status: g.takeem_status || '',
       custom_info_text: g.custom_info_text || '', notify_target: g.notify_target || 'both',
     };
     await runAction(ev.target, () => TW.call('testweb_mutate', payload),

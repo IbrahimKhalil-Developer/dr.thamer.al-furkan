@@ -509,6 +509,10 @@ Deno.serve(async (req: Request) => {
       const isExam = table === "tests";
       const { data: row } = await supabaseAdmin.from(tbl).select("*").eq("id", rowId).maybeSingle();
       if (!row) return jsonResponse({ error: true, errors: "الصف غير موجود" }, 404);
+      // الصف المُقيَّم مسبقاً (finished) لا يُعاد رفع تقييمه
+      if (String(row.status ?? "") === "finished") {
+        return jsonResponse({ error: true, errors: "تم رفع تقييم الطالب مسبقًا." }, 400);
+      }
 
       const { data: stu } = await supabaseAdmin.from("users")
         .select("full_name, gender, user_phone_number").eq("user_id", row.user_id).maybeSingle();
@@ -547,7 +551,12 @@ Deno.serve(async (req: Request) => {
         if (!isExam && isOld && ps === "reject") {
           return jsonResponse({ error: true, errors: "لا يمكن جعل صف قديم راسباً، يُسمح فقط بتعديل الأخطاء ضمن نطاق النجاح (٠ إلى ٢)." }, 400);
         }
-        patch.status = "finished"; patch.page_status = ps; patch.takeem_status = ps;
+        patch.status = "finished"; patch.page_status = ps;
+        // المراجعة: مقدار المراجعة (نص) في takeem، وتقييم المراجعة في takeem_status
+        const VALID_REVIEW = ["perfect", "good", "very_good", "reject"];
+        const reviewStatus = body?.takeem_status && VALID_REVIEW.includes(String(body.takeem_status)) ? String(body.takeem_status) : ps;
+        patch.takeem = body?.takeem != null && String(body.takeem).trim() !== "" ? String(body.takeem).trim() : null;
+        patch.takeem_status = reviewStatus;
         patch.errors_number = isExam ? { sowad, nisyan, fateh } : { sowad, nisyan };
         if (body?.custom_info_text) patch.custom_info = String(body.custom_info_text);
         resultText = psLabel(ps, isFU);

@@ -349,11 +349,13 @@ Deno.serve(async (req: Request) => {
 
       // ── إعادة بناء الصفوف: إعادة الحفظ (reset) أو تعديل الصفحة الحالية (page_current) ──
       // reset: حذف كل صفوف users_pages وإرجاع page_current إلى صفحة البداية وإنشاء صف أول جديد.
-      // page_current: حذف الصفوف التي page >= الحد (الصفحة المُدخلة + edp - 1) وإعادة بناء الصف الحالي not_ready.
+      // page_current: القيمة المُدخلة = قيمة عمود page لصف موجود مباشرةً (كآخر صف ناجح).
+      // نحذف الصفوف التي page >= القيمة المُدخلة، ونعيد بناء ذلك الصف not_ready للمراجعة.
       let didRebuild = false;
       let rebuildPage = 0;       // قيمة عمود page للصف الجديد
       let rebuildDisp = "";      // MePageArabic للصف الجديد
       if (reset) {
+        // إعادة الحفظ: page_current = صفحة البداية، وأول صف كما في pages_system = start_page + edp - 1
         await supabaseAdmin.from("users_pages").delete().eq("save_id", saveId);
         patch.page_current = effStart;
         rebuildPage = effStart + edp - 1;
@@ -364,7 +366,8 @@ Deno.serve(async (req: Request) => {
         const nc = Number(f.page_current);
         if (!(nc > 0)) return jsonResponse({ error: true, errors: "قيمة الصفحة الحالية غير صحيحة" }, 400);
         if (nc < effStart) return jsonResponse({ error: true, errors: "الصفحة الحالية يجب ألا تقل عن صفحة البداية." }, 400);
-        rebuildPage = nc + edp - 1;
+        // القيمة المُدخلة هي رقم عمود page مباشرةً (آخر صفحة في نطاق اليوم)
+        rebuildPage = nc;
         await supabaseAdmin.from("users_pages").delete().eq("save_id", saveId).gte("page", rebuildPage);
         patch.page_current = nc;
         rebuildDisp = buildPageDisplay(rebuildPage, edp);

@@ -988,7 +988,6 @@ Deno.serve(async (req: Request) => {
             const pageDisp     = buildPageDisplay(firstPageNum, edp);
             await createPageRow(supabase, userId, saveId, teacherId, tRec?.full_name ?? "", tRec?.photo_url ?? "", firstPageNum, edp,
               { status: newSt, page_status: newSt, date: tomorrow, MePageArabic: pageDisp });
-            await supabase.from("users_saves").update({ page_current: firstPageNum - Math.ceil(edp) + 1 }).eq("id", saveId);
             await waha(user.user_phone_number, msgNewSaveStudent(saveName, user.full_name, isFU, pageDisp, convertPhone(user.user_phone_number)));
             continue;
           }
@@ -997,13 +996,17 @@ Deno.serve(async (req: Request) => {
           const lastPage   = Number(lastRow.page);
           const lastDate   = String(lastRow.date ?? today).split("T")[0];
 
+          // الصفحة الحالية (page_current) = صفحة آخر صف مُقيّم بنجاح (finished وغير راسب)
+          if (lastStatus === "finished" && ["good", "very_good", "perfect"].includes(String(lastRow.page_status ?? ""))) {
+            await supabase.from("users_saves").update({ page_current: lastPage }).eq("id", saveId);
+          }
+
           // ── استئناف ───────────────────────────────────────────────────────
           if (lastStatus === "sus_to_act") {
             const nextPage = lastPage + Math.ceil(edp);
             const pageDisp = buildPageDisplay(nextPage, edp);
             await createPageRow(supabase, userId, saveId, teacherId, tRec?.full_name ?? "", tRec?.photo_url ?? "", nextPage, edp,
               { status: newSt, page_status: newSt, date: tomorrow, MePageArabic: pageDisp });
-            await supabase.from("users_saves").update({ page_current: nextPage - Math.ceil(edp) + 1 }).eq("id", saveId);
             await waha(user.user_phone_number, msgResumeStudent(saveName, user.full_name, isFU, pageDisp));
             if (tPhone) await waha(tPhone, msgResumeTeacher(saveName, user.full_name, isFU, iFT));
             adminSummary.push({ studentName: user.full_name, teacherName: tRec?.full_name ?? "", typeLabel: "حفظي",
@@ -1167,8 +1170,6 @@ Deno.serve(async (req: Request) => {
 
           await createPageRow(supabase, userId, saveId, teacherId, tRec?.full_name ?? "", tRec?.photo_url ?? "",
             nextPageToAdd, edp, { status: newSt, page_status: newSt, date: tomorrow, MePageArabic: mePageArabic });
-          // تحديث الصفحة الحالية = أول صفحة من نطاق الصف الجديد
-          await supabase.from("users_saves").update({ page_current: nextPageToAdd - Math.ceil(edp) + 1 }).eq("id", saveId);
 
         // ════════════════════════════════════════════════════════
         //  IN_EXAM1 / IN_EXAM2

@@ -414,6 +414,58 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: false });
     }
 
+    /* ── تعديل الحفظ من الصفر (start/end/every_day جديدة + بدء جديد) ── */
+    if (action === "rebuild_save") {
+      const saveId = String(body?.save_id ?? "");
+      const f = body?.fields ?? {};
+      if (!saveId) return jsonResponse({ error: true, errors: "save_id مطلوب" }, 400);
+      const startPage = Number(f.start_page), endPage = Number(f.end_page), everyDay = Number(f.every_day_page);
+      if (!startPage || !endPage || !everyDay) return jsonResponse({ error: true, errors: "جميع الحقول مطلوبة" }, 400);
+      if (endPage <= startPage) return jsonResponse({ error: true, errors: "صفحة النهاية يجب أن تكون أكبر من البداية" }, 400);
+
+      const { data: save } = await supabaseAdmin.from("users_saves").select("*").eq("id", saveId).maybeSingle();
+      if (!save) return jsonResponse({ error: true, errors: "الحفظ غير موجود" }, 404);
+      const { data: stu } = await supabaseAdmin.from("users")
+        .select("full_name, gender, user_phone_number").eq("user_id", save.user_id).maybeSingle();
+
+      const edp = Math.max(1, Math.ceil(everyDay));
+      const tId = save.teacher_id ?? null;
+      const tName = save.teacher_name ?? "";
+      let tPhoto = "";
+      if (tId) {
+        const { data: tRec } = await supabaseAdmin.from("teachers").select("photo_url").eq("teacher_id", tId).maybeSingle();
+        tPhoto = tRec?.photo_url ?? "";
+      }
+
+      // تحديث بيانات الحفظ + تحويله إلى ACTIVE وإرجاع الصفحة الحالية لصفحة البداية
+      await supabaseAdmin.from("users_saves").update({
+        start_page: startPage, end_page: endPage, every_day_page: everyDay,
+        page_current: startPage, status: "ACTIVE", status_reason: null, old_status: null,
+      }).eq("id", saveId);
+
+      // حذف كل صفوف الحفظ وإنشاء صف أول جديد (غير مستعد) كما في pages_system
+      await supabaseAdmin.from("users_pages").delete().eq("save_id", saveId);
+      const firstPage = startPage + edp - 1;
+      const disp = buildPageDisplay(firstPage, edp);
+      await supabaseAdmin.from("users_pages").insert([{
+        user_id: save.user_id, save_id: saveId,
+        teacher_id: tId, teacher_name: tName, teacher_photo: tPhoto,
+        status: "not_ready", page_status: "not_ready",
+        takeem: null, takeem_status: null,
+        errors_number: { sowad: 0, nisyan: 0 },
+        created_at: nowIso(), page: firstPage, MePageArabic: disp, date: baghdadDate(0),
+      }]);
+
+      // إبلاغ الطالب بحفظ اليوم وطلب الاستعداد
+      if (stu?.user_phone_number) {
+        const txt = `📖 حفظ اليوم\nحفظ${g(stu.gender, "كَ", "كِ")} لليوم: *${disp}*\nيُرجى ${g(stu.gender, "منكَ", "منكِ")} الاستعداد للتسميع.`;
+        await sendWaha(stu.user_phone_number, wrapMsg(A, txt));
+      }
+
+      await writeLog(A, `أعاد ضبط الحفظ (${save.name ?? ""}) ${g(stu?.gender, "للطالب", "للطالبة")} (${stu?.full_name ?? save.user_id}) من الصفر: من الصفحة ${startPage} إلى ${endPage}، ${everyDay} صفحة/يوم، وحوّله إلى نشط.`);
+      return jsonResponse({ error: false });
+    }
+
     /* ── تعيين كلمة المرور (+ system_key) ───────────────────────── */
     if (action === "set_password") {
       const kind = String(body?.kind ?? "student");

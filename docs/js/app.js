@@ -413,6 +413,7 @@ function saveBlock(s) {
       <div class="progress-bar" style="flex:1;min-width:160px"><div style="width:${s.progress_pct}%"></div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" onclick="openEditSaveModal('${sid}')">${icon('edit', 13)} تعديل</button>
+        <button class="btn btn-ghost btn-sm" onclick="openRebuildSaveModal('${sid}')">${icon('edit', 13)} تعديل من الصفر</button>
         <button class="btn btn-ghost btn-sm" onclick="openExamControlModal('${sid}','EXAM1')">${icon('exam', 13)} الاختبار الجزئي</button>
         <button class="btn btn-ghost btn-sm" onclick="openExamControlModal('${sid}','EXAM2')">${icon('exam', 13)} الاختبار التراكمي</button>
       </div>
@@ -625,6 +626,28 @@ function openEditSaveModal(saveId) {
     if (!reset && String(f.page_current) !== String(s.page_current ?? '')) fields.page_current = f.page_current;
     await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'update_save', save_id: s.id, fields, notify_target, notify_student, reset }),
       { okMsg: 'تم حفظ بيانات الحفظ', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
+  };
+}
+
+function openRebuildSaveModal(saveId) {
+  const s = APP.current.saves.find(x => String(x.id) === String(saveId)); if (!s) return;
+  const body = `<p class="muted" style="margin-bottom:12px">إعادة بناء الحفظ <b>${UI.esc(s.name || '')}</b> من الصفر: تُحذف كل صفوف الحفظ ويبدأ صف اليوم من جديد (غير مستعد)، ويُحوّل الحفظ إلى «نشط»، ويُبلَّغ الطالب بحفظ اليوم.</p>
+  <div class="form-grid">
+    ${fieldHtml('من صفحة (البداية)', 'start_page', s.start_page, 'number')}
+    ${fieldHtml('إلى صفحة (النهاية)', 'end_page', s.end_page, 'number')}
+    ${fieldHtml('عدد الصفحات يومياً', 'every_day_page', s.every_day_page, 'number')}
+  </div>`;
+  const foot = `<button class="btn btn-primary" id="md-ok">حفظ وإعادة البناء</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('تعديل الحفظ من الصفر', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    if (!f.start_page || !f.end_page || !f.every_day_page) { UI.toast('جميع الحقول مطلوبة', 'err'); return; }
+    if (Number(f.end_page) <= Number(f.start_page)) { UI.toast('صفحة النهاية يجب أن تكون أكبر من البداية', 'err'); return; }
+    if (!confirm('سيتم حذف كل صفوف هذا الحفظ نهائياً وإعادة بنائه من الصفر وإبلاغ الطالب. متابعة؟')) return;
+    const fields = { start_page: f.start_page, end_page: f.end_page, every_day_page: f.every_day_page };
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'rebuild_save', save_id: s.id, fields }),
+      { okMsg: 'تمت إعادة بناء الحفظ', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
   };
 }
 

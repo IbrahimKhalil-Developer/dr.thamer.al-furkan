@@ -452,7 +452,7 @@ function pagesTable(rows, isExam) {
 function errorsText(e, isExam) {
   if (!e || typeof e !== 'object') return '—';
   const p = [];
-  if (e.sowad != null) p.push('تسويد ' + e.sowad);
+  if (e.sowad != null) p.push('سواد ' + e.sowad);
   if (e.nisyan != null) p.push('نسيان ' + e.nisyan);
   if (isExam && e.fateh != null) p.push('فتح ' + e.fateh);
   return p.join('، ') || '—';
@@ -675,7 +675,7 @@ function openGradeModal(table, rowId, isExam, isOld) {
     ? `<p class="muted" style="margin-bottom:14px;color:var(--danger,#e55)">صف قديم: يُسمح فقط بتعديل الأخطاء ضمن نطاق النجاح (٠ إلى ٢)، لا يمكن جعله راسباً.</p>`
     : `<p class="muted" style="margin-bottom:14px">اختر نتيجة التقييم، وسيُرسل إشعار للطالب ومشرفه تلقائياً.</p>`;
   const body = `${oldNote}
-    <div class="form-grid">${fieldHtml('التسويد (0-999)', 'sowad', 0, 'number')}${fieldHtml('النسيان (0-999)', 'nisyan', 0, 'number')}${isExam ? fieldHtml('الفتح (0-999)', 'fateh', 0, 'number') : ''}</div>
+    <div class="form-grid">${fieldHtml('السواد (0-999)', 'sowad', 0, 'number')}${fieldHtml('النسيان (0-999)', 'nisyan', 0, 'number')}${isExam ? fieldHtml('الفتح (0-999)', 'fateh', 0, 'number') : ''}</div>
     <div class="form-grid">${fieldHtml('مقدار المراجعة (اختياري)', 'takeem', '', 'text')}${selectHtml('تقييم المراجعة', 'takeem_status', '', [['', '—'], ['perfect', 'مُتقِن'], ['good', 'جيد جداً'], ['very_good', 'إمتياز'], ['reject', 'رسوب']])}</div>
     ${textareaHtml('ملاحظة (اختياري)', 'custom_info_text', '', 'ملاحظة تظهر للطالب...')}
     ${selectHtml('الإبلاغ', 'notify_target', 'both', NOTIFY_OPTS)}
@@ -1141,7 +1141,7 @@ function recordsTable(rows) {
     <td>${r.review_kind ? UI.gradeBadge(r.review_kind, r.review_label) : '—'}</td>
   </tr>`).join('');
   return `<div class="tbl-wrap"><table>
-    <thead><tr><th>التاريخ</th><th>الطالب</th><th>المشرف</th><th>الحفظ</th><th>الصفحة/النوع</th><th>الحالة</th><th>تسويد</th><th>نسيان</th><th>فتح</th><th>مقدار المراجعة</th><th>تقييم المراجعة</th></tr></thead>
+    <thead><tr><th>التاريخ</th><th>الطالب</th><th>المشرف</th><th>الحفظ</th><th>الصفحة/النوع</th><th>الحالة</th><th>سواد</th><th>نسيان</th><th>فتح</th><th>مقدار المراجعة</th><th>تقييم المراجعة</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
 }
 
@@ -1205,7 +1205,7 @@ async function pageFullLogStudent(userId) {
 
 function exportRowsToExcel(rows, title, fileName) {
   if (!window.XLSX) { UI.toast('مكتبة التصدير غير متوفرة', 'err'); return; }
-  const headers = ['التاريخ', 'الطالب', 'المشرف', 'الحفظ', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح', 'مقدار المراجعة', 'تقييم المراجعة'];
+  const headers = ['التاريخ', 'الطالب', 'المشرف', 'الحفظ', 'الصفحة/النوع', 'الحالة', 'سواد', 'نسيان', 'فتح', 'مقدار المراجعة', 'تقييم المراجعة'];
   const aoa = [[title], [`عدد الصفوف: ${rows.length} — ${new Date().toLocaleString('ar-EG')}`], [], headers];
   rows.forEach(r => aoa.push([UI.fmtDateShort(r.date), r.student_name, r.teacher_name, r.save_name, r.page_label, r.status_label, r.sowad, r.nisyan, r.fateh, r.takeem ?? '', r.review_label ?? '']));
   const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -1223,7 +1223,7 @@ async function exportAllStudents() {
     res.students.forEach(st => {
       let name = (st.student_name || 'طالب').replace(/[\\/?*\[\]:]/g, '').slice(0, 28) || 'طالب';
       const base = name; let i = 1; while (used.has(name)) name = `${base}_${i++}`; used.add(name);
-      const aoa = [[st.student_name], [], ['التاريخ', 'المشرف', 'الحفظ', 'الصفحة/النوع', 'الحالة', 'تسويد', 'نسيان', 'فتح', 'مقدار المراجعة', 'تقييم المراجعة']];
+      const aoa = [[st.student_name], [], ['التاريخ', 'المشرف', 'الحفظ', 'الصفحة/النوع', 'الحالة', 'سواد', 'نسيان', 'فتح', 'مقدار المراجعة', 'تقييم المراجعة']];
       st.rows.forEach(r => aoa.push([UI.fmtDateShort(r.date), r.teacher_name, r.save_name, r.page_label, r.status_label, r.sowad, r.nisyan, r.fateh, r.takeem ?? '', r.review_label ?? '']));
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       XLSX.utils.book_append_sheet(wb, ws, name);

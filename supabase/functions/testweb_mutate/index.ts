@@ -509,10 +509,7 @@ Deno.serve(async (req: Request) => {
       const isExam = table === "tests";
       const { data: row } = await supabaseAdmin.from(tbl).select("*").eq("id", rowId).maybeSingle();
       if (!row) return jsonResponse({ error: true, errors: "الصف غير موجود" }, 404);
-      // الصف المُقيَّم مسبقاً (finished) لا يُعاد رفع تقييمه
-      if (String(row.status ?? "") === "finished") {
-        return jsonResponse({ error: true, errors: "تم رفع تقييم الطالب مسبقًا." }, 400);
-      }
+      // ملاحظة: اللوحة يُسمح لها بتعديل/إعادة تقييم الصف المنجز (بخلاف API الأستاذ).
 
       const { data: stu } = await supabaseAdmin.from("users")
         .select("full_name, gender, user_phone_number").eq("user_id", row.user_id).maybeSingle();

@@ -271,6 +271,10 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── 7. التحقق من أن الصف في حالة استعداد ────────────────────────
+  // الصف المُقيَّم مسبقاً لا يُعاد رفع تقييمه عبر تطبيق الأستاذ (التعديل من اللوحة فقط)
+  if (targetRow.status === "finished") {
+    return jsonResponse({ error: true, errors: "تم رفع تقييم الطالب مسبقًا" }, 403);
+  }
   if (targetRow.status !== "ready" || targetRow.page_status !== "ready") {
     return jsonResponse({ error: true, errors: "لا يمكن نشر التقييم، حالة الصف الحالية لا تسمح بذلك، يرجى التواصل مع إدارة المركز" }, 403);
   }

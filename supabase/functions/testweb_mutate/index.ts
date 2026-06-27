@@ -22,6 +22,18 @@ function buildPageDisplay(page: number, edp: number): string {
   return Array.from({ length: count }, (_, i) => String(page - (count - 1 - i))).join(" و ");
 }
 
+// جلب أسماء السور للصفحات من جدول quran_index (مطابق لـ getPageNames في pages_system)
+async function resolvePageName(page: number, edp: number): Promise<string> {
+  try {
+    const count = edp < 1 ? 1 : Math.ceil(edp);
+    const pages = Array.from({ length: count }, (_, i) => page - (count - 1 - i));
+    const { data } = await supabaseAdmin.from("quran_index").select("page_number, page_name").in("page_number", pages);
+    const map: Record<number, string> = {};
+    for (const r of data ?? []) map[r.page_number] = r.page_name;
+    return [...new Set(pages.map((p) => map[p] ?? String(p)))].join(" & ");
+  } catch { return String(page); }
+}
+
 function randomPassword(): string {
   const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ", lower = "abcdefghijkmnpqrstuvwxyz";
   const digits = "23456789", symbols = "#$@&";
@@ -388,7 +400,7 @@ Deno.serve(async (req: Request) => {
           takeem: null, takeem_status: null,
           errors_number: { sowad: 0, nisyan: 0 },
           created_at: nowIso(),
-          page: rebuildPage, MePageArabic: rebuildDisp,
+          page: rebuildPage, page_name: await resolvePageName(rebuildPage, edp), MePageArabic: rebuildDisp,
           date: today,
         }]);
         // إشعار الطالب — فقط عند تفعيل الخيار، بنفس رسالة أول صف لكن بصيغة "حفظ اليوم"
@@ -444,7 +456,7 @@ Deno.serve(async (req: Request) => {
         status: "not_ready", page_status: "not_ready",
         takeem: null, takeem_status: null,
         errors_number: { sowad: 0, nisyan: 0 },
-        created_at: nowIso(), page: firstPage, MePageArabic: disp, date: baghdadDate(0),
+        created_at: nowIso(), page: firstPage, page_name: await resolvePageName(firstPage, edp), MePageArabic: disp, date: baghdadDate(0),
       }]);
 
       // إبلاغ الطالب بحفظ اليوم وطلب الاستعداد
@@ -781,7 +793,7 @@ Deno.serve(async (req: Request) => {
           status: "not_ready", page_status: "not_ready",
           errors_number: { sowad: 0, nisyan: 0 },
           created_at: ts,
-          page: firstPageNum, MePageArabic: pageDisp,
+          page: firstPageNum, page_name: await resolvePageName(firstPageNum, everyDay), MePageArabic: pageDisp,
           date: baghdadDate(0),
         }]);
       }

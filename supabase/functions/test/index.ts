@@ -1,6 +1,6 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   const t0 = performance.now();
 
   const supabase = createClient(
@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   const userId = "07ba3700-ea84-4f44-a5c9-37260128da23";
 
   const perQueryTimings: string[] = [];
-  let errors: (string | undefined)[] = [];
+  const errors: string[] = [];
 
   const tQueryStart = performance.now();
 
@@ -39,9 +39,7 @@ Deno.serve(async (req) => {
         timings: {
           total_query_time_ms: (tQueryEnd - tQueryStart).toFixed(3),
           total_function_time_ms: (performance.now() - t0).toFixed(3),
-          average_per_query_ms: (
-            (tQueryEnd - tQueryStart) / 10
-          ).toFixed(3),
+          average_per_query_ms: ((tQueryEnd - tQueryStart) / 10).toFixed(3),
         },
         per_query_timings_ms: perQueryTimings,
         queries_count: 10,
@@ -52,13 +50,5 @@ Deno.serve(async (req) => {
       2
     ),
     { headers: { "Content-Type": "application/json" } }
-  );
-});      null,
-      2
-    ),
-    {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
-    }
   );
 });

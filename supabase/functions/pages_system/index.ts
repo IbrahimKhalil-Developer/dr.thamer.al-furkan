@@ -1334,11 +1334,70 @@ Deno.serve(async (req: Request) => {
       const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
       const dayName  = dayNames[new Date(today + "T00:00:00").getDay()] ?? "";
 
-      let summaryMsg = `${today} ${dayName}\n\n`;
-      adminSummary.forEach((r, i) => {
-        summaryMsg += `${i + 1}- ${r.studentName} | ${r.typeLabel} | ${r.resultLabel}\n`;
-      });
-      for (const ap of adminPhones) await waha(ap, summaryMsg);
+      // خريطة جنس الطالب حسب رقم الهاتف (لتقسيم الملخص إلى ذكور وإناث)
+      const genderByPhone = new Map<string, string>();
+      for (const u of users ?? []) {
+        genderByPhone.set(convertPhone(u.user_phone_number ?? ""), u.gender === "female" ? "female" : "male");
+      }
+      const buildSummary = (rows: AdminSummaryRow[], label: string): string => {
+        let msg = `${today} ${dayName} — ${label}\n\n`;
+        rows.forEach((r, i) => {
+          msg += `${i + 1}- ${r.studentName} | ${r.typeLabel} | ${r.resultLabel}\n`;
+        });
+        return msg;
+      };
+      const maleRows   = adminSummary.filter((r) => genderByPhone.get(r.studentPhone) !== "female");
+      const femaleRows = adminSummary.filter((r) => genderByPhone.get(r.studentPhone) === "female");
+      for (const ap of adminPhones) {
+        if (maleRows.length)   await waha(ap, buildSummary(maleRows, "الطلاب"));
+        if (femaleRows.length) await waha(ap, buildSummary(femaleRows, "الطالبات"));
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  المرحلة الأخيرة: إن كان الغد يوم الخميس — إيقاف كل الحفظ للأسبوع
+    //  (بعد معالجة كل الصفوف وإرسال كل الرسائل والإكمال)
+    // ════════════════════════════════════════════════════════════════
+    const tomorrowIsThursday = new Date(tomorrow + "T12:00:00Z").getUTCDay() === 4;
+    if (tomorrowIsThursday) {
+      const { data: affected } = await supabase.from("users_saves")
+        .select("id, user_id, teacher_id").in("status", ["ACTIVE", "SUSPENDED"]);
+      const list = affected ?? [];
+      if (list.length > 0) {
+        // إيقاف نهائي لكل الحفظ النشط/المعلّق استعداداً لاختبارات الخميس والجمعة
+        await supabase.from("users_saves").update({ status: "TERMINATED" }).in("status", ["ACTIVE", "SUSPENDED"]);
+
+        // إشعار الطلاب (حسب جنس الطالب)
+        const userIds = [...new Set(list.map((s: any) => String(s.user_id)).filter(Boolean))];
+        if (userIds.length) {
+          const { data: stuRows } = await supabase.from("users")
+            .select("gender, user_phone_number").in("user_id", userIds);
+          for (const u of stuRows ?? []) {
+            if (u.user_phone_number) {
+              const isF = u.gender === "female";
+              await waha(u.user_phone_number, `تم إيقاف حفظ${isF ? "كِ" : "كَ"} لهذا الأسبوع تجهزًا لإختبارات يوم غد الخميس والجمعة.`);
+            }
+          }
+        }
+
+        // إشعار المشرفين (حسب جنس المشرف)
+        const teacherIds = [...new Set(list.map((s: any) => String(s.teacher_id)).filter(Boolean))];
+        if (teacherIds.length) {
+          const { data: tchRows } = await supabase.from("teachers")
+            .select("gender, phone_number").in("teacher_id", teacherIds);
+          for (const t of tchRows ?? []) {
+            if (t.phone_number) {
+              const isF = t.gender === "female";
+              await waha(t.phone_number, `تم إيقاف حفظ طلاب${isF ? "كِ" : "كَ"} لهذا الأسبوع تجهزًا لإختبارات يوم غد الخميس والجمعة.`);
+            }
+          }
+        }
+
+        // إشعار الإداريين
+        for (const ap of adminPhones) {
+          await waha(ap, `تم إيقاف حفظ جميع الطلاب لهذا الأسبوع تجهزًا لإختبارات يوم غد الخميس والجمعة.`);
+        }
+      }
     }
 
     return new Response(JSON.stringify({ success: true }), {

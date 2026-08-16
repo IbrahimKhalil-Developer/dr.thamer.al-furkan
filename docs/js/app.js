@@ -1236,30 +1236,42 @@ async function exportAllStudents() {
 function pageAddStudent() {
   view().innerHTML = `<div class="panel" style="max-width:560px">
     <div class="panel-head"><h2>إضافة طالب جديد</h2></div>
+    <p class="muted" style="margin-bottom:12px">أضف البيانات الأساسية فقط — الحفظ يُضاف لاحقاً من ملف الطالب. بعد كل إضافة تُفرَّغ الحقول لإضافة طالب آخر مباشرةً.</p>
     <div class="form-grid">
       ${fieldHtml('الاسم الكامل', 'full_name', '')}
       ${fieldHtml('رقم الهاتف', 'phone', '', 'tel')}
       ${selectHtml('الجنس', 'gender', 'male', [['male', 'ذكر'], ['female', 'أنثى']])}
-      ${selectHtml('المشرف', 'teacher_id', '', [['', '— اختر مشرفاً —']].concat(teacherOptions()))}
-      ${fieldHtml('اسم الحفظ', 'save_name', '')}
-      ${fieldHtml('من صفحة', 'start_page', '', 'number')}
-      ${fieldHtml('إلى صفحة', 'end_page', '', 'number')}
-      ${fieldHtml('الورد اليومي', 'every_day_page', '1', 'number')}
     </div>
     <button class="btn btn-primary btn-block" id="as-submit" style="margin-top:18px">إضافة الطالب</button>
+    <div id="as-added" style="margin-top:18px"></div>
   </div>`;
   $('#as-submit').onclick = async ev => {
     const root = ev.target.closest('.panel');
     const f = collectFields(root);
-    if (!f.full_name || !f.phone || !f.teacher_id || !f.save_name || !f.start_page || !f.end_page || !f.every_day_page) {
-      UI.toast('جميع الحقول مطلوبة', 'err'); return;
-    }
-    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'add_student', fields: f }), {
+    if (!f.full_name || !f.phone) { UI.toast('الاسم ورقم الهاتف مطلوبان', 'err'); return; }
+    const addedName = f.full_name;
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'add_student', fields: { full_name: f.full_name, phone: f.phone, gender: f.gender } }), {
       okMsg: 'تمت إضافة الطالب', refreshDash: true,
       after: r => {
-        const m = UI.modal('تمت الإضافة بنجاح', `<p class="muted" style="margin-bottom:10px">كلمة مرور الطالب الجديد:</p>${UI.pwField(r.password)}`,
-          `<button class="btn btn-primary" id="md-go">عرض ملف الطالب</button>`);
-        m.el.querySelector('#md-go').onclick = () => { m.close(); location.hash = `#/students/${r.user_id}`; };
+        // بطاقة للطالب المُضاف مع كلمة المرور + رابط ملفه
+        const wrap = $('#as-added');
+        if (wrap) {
+          const card = document.createElement('div');
+          card.className = 'panel';
+          card.style.cssText = 'margin-bottom:10px;padding:12px';
+          card.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+              <b>${UI.esc(addedName)}</b>
+              <a class="btn btn-ghost btn-sm" href="#/students/${r.user_id}">عرض ملف الطالب</a>
+            </div>
+            <p class="muted" style="margin:8px 0 4px">كلمة المرور:</p>${UI.pwField(r.password)}`;
+          wrap.insertBefore(card, wrap.firstChild);
+        }
+        // تفريغ الحقول والتركيز على الاسم لإضافة التالي
+        const nameEl = root.querySelector('[data-k="full_name"]');
+        const phoneEl = root.querySelector('[data-k="phone"]');
+        if (nameEl) nameEl.value = '';
+        if (phoneEl) phoneEl.value = '';
+        if (nameEl) nameEl.focus();
       },
     });
   };

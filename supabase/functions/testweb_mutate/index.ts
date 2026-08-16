@@ -687,23 +687,15 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: false, notified });
     }
 
-    /* ── إضافة طالب جديد + حفظه الأول ─────────────────────────────── */
+    /* ── إضافة طالب جديد (البيانات الأساسية فقط، بدون حفظ) ────────── */
     if (action === "add_student") {
       const f = body?.fields ?? {};
       const fullName = String(f.full_name ?? "").trim();
       const phone = String(f.phone ?? "").trim();
       const gender = f.gender === "female" ? "female" : "male";
-      const teacherId = String(f.teacher_id ?? "");
-      const saveName = String(f.save_name ?? "").trim();
-      const startPage = Number(f.start_page), endPage = Number(f.end_page), everyDay = Number(f.every_day_page);
-      if (!fullName || !phone || !teacherId || !saveName || !startPage || !endPage || !everyDay) {
-        return jsonResponse({ error: true, errors: "جميع الحقول مطلوبة" }, 400);
+      if (!fullName || !phone) {
+        return jsonResponse({ error: true, errors: "الاسم ورقم الهاتف مطلوبان" }, 400);
       }
-      if (endPage <= startPage) return jsonResponse({ error: true, errors: "صفحة النهاية يجب أن تكون أكبر من البداية" }, 400);
-
-      const { data: teacher } = await supabaseAdmin.from("teachers")
-        .select("teacher_id, full_name, gender, phone_number").eq("teacher_id", teacherId).maybeSingle();
-      if (!teacher) return jsonResponse({ error: true, errors: "المشرف غير موجود" }, 404);
 
       const userPhone = normalizePhone(phone);
       const email = `00${userPhone}@thamer-project.com`;
@@ -711,26 +703,14 @@ Deno.serve(async (req: Request) => {
       const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
         email, password: basePassword + SYSTEM_KEY, email_confirm: true,
       });
-      if (authErr || !authData?.user?.id) return jsonResponse({ error: true, errors: authErr?.message ?? "فشل إنشاء الحساب" }, 400);
+      if (authErr || !authData?.user?.id) return jsonResponse({ error: true, errors: authErr?.message ?? "فشل إنشاء الحساب (قد يكون رقم الهاتف مستخدماً)" }, 400);
       const userId = authData.user.id;
-
-      const ts = nowIso();
-      const { data: saveRow, error: saveErr } = await supabaseAdmin.from("users_saves").insert({
-        user_id: userId, teacher_id: teacher.teacher_id, name: saveName, number: 1,
-        start_page: startPage, end_page: endPage, page_current: startPage, every_day_page: everyDay,
-        created_at: ts, finished_at: null, status: "ACTIVE", exam1: false, exam2: false,
-        teacher_name: teacher.full_name, started_at: ts, db_created_at: ts,
-      }).select("id").single();
-      if (saveErr || !saveRow) {
-        await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => {});
-        return jsonResponse({ error: true, errors: saveErr?.message ?? "فشل إضافة الحفظ" }, 400);
-      }
 
       const myPhone = toLocalPhone(A.phone_number ?? "");
       const { error: userErr } = await supabaseAdmin.from("users").insert({
         user_id: userId, full_name: fullName, user_phone_number: userPhone, email,
-        password: basePassword, teacher_id: teacher.teacher_id, gender,
-        added_admin_phone_number: myPhone, edited_admin_phone_number: myPhone, save_id: saveRow.id,
+        password: basePassword, gender,
+        added_admin_phone_number: myPhone, edited_admin_phone_number: myPhone,
         absence: { total: 0, last_check: 0, last_stopped_at: 0, stopped_abs_total: 0 },
       });
       if (userErr) {
@@ -738,8 +718,8 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: true, errors: userErr.message }, 400);
       }
 
-      await writeLog(A, `أضاف طالب${gender === "female" ? "ة" : ""} جديد${gender === "female" ? "ة" : ""} (${fullName}) بحفظ (${saveName}).`);
-      return jsonResponse({ error: false, user_id: userId, save_id: saveRow.id, password: basePassword });
+      await writeLog(A, `أضاف طالب${gender === "female" ? "ة" : ""} جديد${gender === "female" ? "ة" : ""} (${fullName}) بدون حفظ.`);
+      return jsonResponse({ error: false, user_id: userId, password: basePassword });
     }
 
     /* ── إضافة حفظ جديد لطالب موجود (مع إنهاء الحفظ الحالي اختيارياً) ── */

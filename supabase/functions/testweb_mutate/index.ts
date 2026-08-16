@@ -707,9 +707,11 @@ Deno.serve(async (req: Request) => {
       const userId = authData.user.id;
 
       const myPhone = toLocalPhone(A.phone_number ?? "");
+      // الطالب يُنشأ بدون حفظ — المفاتيح غير المتوفرة تُترك null (تُملأ لاحقاً عند إضافة الحفظ)
       const { error: userErr } = await supabaseAdmin.from("users").insert({
         user_id: userId, full_name: fullName, user_phone_number: userPhone, email,
         password: basePassword, gender,
+        teacher_id: null, save_id: null,
         added_admin_phone_number: myPhone, edited_admin_phone_number: myPhone,
         absence: { total: 0, last_check: 0, last_stopped_at: 0, stopped_abs_total: 0 },
       });

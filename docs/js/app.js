@@ -223,34 +223,17 @@ function pageOverview() {
     return `<div class="panel"><div class="panel-head"><h2>${UI.esc(title)}</h2></div><div>${rows}</div></div>`;
   };
 
-  // ── تقدّم ذكي (حلقة) + إحصائيات عمودية لتوزيع حالات الحفظ ──
+  // ── تقدّم ذكي (حلقة نصف قطرية) + مخطط دائري لتوزيع حالات الحفظ (ApexCharts) ──
   const avg = Math.max(0, Math.min(100, Number(s.avg_progress) || 0));
-  const dist = [
-    { lbl: 'نشط', val: s.active_saves, c: 'var(--teal)' },
-    { lbl: 'اختبار', val: s.in_exam, c: 'var(--blue)' },
-    { lbl: 'مكتمل', val: s.finished_saves, c: 'var(--green)' },
-    { lbl: 'موقوف', val: s.suspended_saves, c: 'var(--gold)' },
-    { lbl: 'لم ينضم', val: s.not_joined, c: 'var(--gray)' },
-    { lbl: 'غياب', val: s.with_absence, c: 'var(--red)' },
-  ];
-  const vmax = Math.max(1, ...dist.map(d => Number(d.val) || 0));
-  const vbars = dist.map(d => {
-    const v = Number(d.val) || 0;
-    const h = Math.max(4, Math.round((v / vmax) * 100));
-    return `<div class="vcol">
-      <div class="vnum">${v}</div>
-      <div class="vbar-track"><div class="vbar-fill" style="height:${h}%;background:${d.c}"></div></div>
-      <div class="vlabel">${d.lbl}</div>
-    </div>`;
-  }).join('');
   const hero = `<div class="hero-stats">
-    <div class="panel ring-panel">
-      <div class="ring" style="--val:${avg}"><div class="ring-in"><div class="ring-val">${avg}%</div><div class="ring-lbl">متوسط التقدّم</div></div></div>
-      <div class="muted" style="font-size:12.5px;text-align:center">${s.students_total} طالب · ${s.active_saves} حفظ نشط</div>
+    <div class="panel">
+      <div class="panel-head"><h2>متوسط التقدّم</h2></div>
+      <div class="chart-box" id="chart-progress"></div>
+      <div class="chart-note">${s.students_total} طالب · ${s.active_saves} حفظ نشط</div>
     </div>
     <div class="panel">
       <div class="panel-head"><h2>توزيع حالات الحفظ</h2></div>
-      <div class="vchart">${vbars}</div>
+      <div class="chart-box" id="chart-dist"></div>
     </div>
   </div>`;
 
@@ -265,6 +248,61 @@ function pageOverview() {
       <div class="panel-head"><h2>أكثر المشرفين طلاباً</h2></div>
       <div style="display:grid;gap:10px">${topT}</div>
     </div>`;
+
+  renderOverviewCharts(avg, s);
+}
+
+/* ── رسوم النظرة العامة عبر ApexCharts (مع تنظيف المثيلات السابقة) ── */
+let _ovCharts = [];
+function renderOverviewCharts(avg, s) {
+  _ovCharts.forEach(c => { try { c.destroy(); } catch (e) {} });
+  _ovCharts = [];
+  if (!window.ApexCharts) return;
+
+  const progEl = document.querySelector('#chart-progress');
+  if (progEl) {
+    const c1 = new ApexCharts(progEl, {
+      chart: { type: 'radialBar', height: 260, fontFamily: 'inherit', offsetY: 4 },
+      series: [avg],
+      labels: ['التقدّم'],
+      colors: ['#8B7CFF'],
+      plotOptions: { radialBar: {
+        startAngle: -135, endAngle: 135,
+        hollow: { size: '60%' },
+        track: { background: '#1F2740', strokeWidth: '100%', margin: 6 },
+        dataLabels: {
+          name: { color: '#7C84A4', fontSize: '13px', fontWeight: 600, offsetY: 24 },
+          value: { color: '#EEF0FA', fontSize: '38px', fontWeight: 800, offsetY: -12, formatter: v => Math.round(v) + '%' },
+        },
+      } },
+      fill: { type: 'gradient', gradient: { shade: 'dark', type: 'diagonal', shadeIntensity: .4, gradientToColors: ['#22D3EE'], stops: [0, 100] } },
+      stroke: { lineCap: 'round' },
+    });
+    c1.render(); _ovCharts.push(c1);
+  }
+
+  const distEl = document.querySelector('#chart-dist');
+  if (distEl) {
+    const series = [s.active_saves, s.in_exam, s.finished_saves, s.suspended_saves, s.not_joined, s.with_absence].map(n => Number(n) || 0);
+    const c2 = new ApexCharts(distEl, {
+      chart: { type: 'donut', height: 260, fontFamily: 'inherit' },
+      series,
+      labels: ['نشط', 'في الاختبار', 'مكتمل', 'موقوف', 'لم ينضمّوا', 'لديهم غياب'],
+      colors: ['#2DD4BF', '#38BDF8', '#34D399', '#FBBF24', '#94A3B8', '#FB7185'],
+      legend: { position: 'bottom', fontSize: '12.5px', markers: { width: 9, height: 9, radius: 6 }, itemMargin: { horizontal: 7, vertical: 3 } },
+      dataLabels: { enabled: false },
+      stroke: { width: 2, colors: ['#161B2E'] },
+      plotOptions: { pie: { donut: { size: '66%', labels: {
+        show: true,
+        name: { fontSize: '13px', color: '#7C84A4' },
+        value: { fontSize: '26px', fontWeight: 800, color: '#EEF0FA' },
+        total: { show: true, label: 'الإجمالي', color: '#7C84A4', formatter: w => w.globals.seriesTotals.reduce((a, b) => a + b, 0) },
+      } } } },
+      tooltip: { theme: 'dark', fillSeriesColor: false },
+      responsive: [{ breakpoint: 480, options: { chart: { height: 300 } } }],
+    });
+    c2.render(); _ovCharts.push(c2);
+  }
 }
 
 /* ================= الطلاب ================= */

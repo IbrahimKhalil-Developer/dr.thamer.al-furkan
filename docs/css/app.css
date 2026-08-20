@@ -1,22 +1,22 @@
 :root{
-  /* خلفيات وأسطح — قاعدة أزرق ليلي بارد */
-  --bg:#070A12; --bg-2:#0A0E1A; --surface:#111828; --surface-2:#19223A; --surface-3:#222E4C;
-  --text:#EBF1FB; --text-2:#AEBBD6; --muted:#7585A5; --faint:#4A5877;
-  /* لون العلامة — تدرّج فيروزي إلى سماوي */
-  --accent:#2DD4BF; --accent-2:#38BDF8; --accent-d:#14B8A6; --accent-l:#7BEBDD;
-  --accent-soft:rgba(45,212,191,.13);
-  --grad:linear-gradient(135deg,#2DD4BF 0%,#38BDF8 100%);
-  --grad-soft:linear-gradient(135deg,rgba(45,212,191,.15),rgba(56,189,248,.12));
-  --border:rgba(255,255,255,.07); --border-2:rgba(255,255,255,.14);
-  --shadow:0 24px 60px -18px rgba(0,0,0,.7); --shadow-sm:0 10px 30px -12px rgba(0,0,0,.55);
+  /* خلفيات وأسطح — قاعدة أزرق ليلي بنفسجي */
+  --bg:#0A0D18; --bg-2:#0E1222; --surface:#161B2E; --surface-2:#1F2740; --surface-3:#2A3352;
+  --text:#EEF0FA; --text-2:#B4BAD4; --muted:#7C84A4; --faint:#4E567A;
+  /* لون العلامة — تدرّج بنفسجي/نيلي */
+  --accent:#8B7CFF; --accent-2:#22D3EE; --accent-d:#6D5CF0; --accent-l:#B7ADFF;
+  --accent-soft:rgba(139,124,255,.15);
+  --grad:linear-gradient(135deg,#7C6CFF 0%,#A77BFF 100%);
+  --grad-soft:linear-gradient(135deg,rgba(124,108,255,.17),rgba(167,123,255,.12));
+  --border:rgba(255,255,255,.08); --border-2:rgba(255,255,255,.15);
+  --shadow:0 26px 60px -20px rgba(0,0,0,.72); --shadow-sm:0 12px 32px -14px rgba(0,0,0,.6);
   --ring:0 0 0 3px var(--accent-soft);
   /* ألوان الحالات */
   --danger:#FB7185;
-  --green:#34D399; --green-bg:rgba(52,211,153,.14); --gold:#F5B54A; --gold-bg:rgba(245,181,74,.15);
-  --teal:#2DD4BF; --teal-bg:rgba(45,212,191,.14); --red:#FB7185; --red-bg:rgba(251,113,133,.14);
-  --gray:#94A3B8; --gray-bg:rgba(148,163,184,.13); --blue:#60A5FA; --blue-bg:rgba(96,165,250,.15);
-  --purple:#A78BFA; --purple-bg:rgba(167,139,250,.15);
-  --radius:18px; --radius-sm:12px; --radius-lg:26px;
+  --green:#34D399; --green-bg:rgba(52,211,153,.15); --gold:#FBBF24; --gold-bg:rgba(251,191,36,.15);
+  --teal:#2DD4BF; --teal-bg:rgba(45,212,191,.15); --red:#FB7185; --red-bg:rgba(251,113,133,.15);
+  --gray:#94A3B8; --gray-bg:rgba(148,163,184,.14); --blue:#38BDF8; --blue-bg:rgba(56,189,248,.15);
+  --purple:#A78BFA; --purple-bg:rgba(167,139,250,.16);
+  --radius:18px; --radius-sm:12px; --radius-lg:24px;
   --sidebar-w:272px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -140,23 +140,18 @@ a{color:var(--accent);text-decoration:none}
 .panel-head h2::before{content:'';width:4px;height:17px;border-radius:99px;background:var(--grad)}
 .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 
-/* ===== الحلقة الدائرية (تقدّم ذكي) + المخطط العمودي ===== */
-.hero-stats{display:grid;grid-template-columns:minmax(220px,270px) 1fr;gap:16px;margin-bottom:18px}
-.ring-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
-.ring{--val:0;width:150px;height:150px;border-radius:50%;
-  background:conic-gradient(from -90deg,var(--accent) 0,var(--accent-2) calc(var(--val)*1%),var(--surface-2) 0);
-  display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 0 34px -12px var(--accent)}
-.ring::before{content:'';position:absolute;inset:14px;border-radius:50%;background:linear-gradient(180deg,var(--surface),var(--bg-2))}
-.ring-in{position:relative;text-align:center;z-index:1}
-.ring-val{font-size:30px;font-weight:800;letter-spacing:-.02em;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-.ring-lbl{font-size:11.5px;color:var(--muted);font-weight:600}
-.vchart{display:flex;align-items:stretch;gap:12px;height:186px;padding-top:6px}
-.vcol{flex:1;display:flex;flex-direction:column;align-items:center;gap:9px;min-width:0}
-.vnum{font-size:14px;font-weight:800;color:var(--text)}
-.vbar-track{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center;background:linear-gradient(180deg,var(--surface-2),transparent);border-radius:11px}
-.vbar-fill{width:62%;max-width:46px;min-height:7px;border-radius:10px 10px 5px 5px;background:var(--grad);box-shadow:0 -4px 20px -6px var(--accent);animation:vgrow .55s cubic-bezier(.2,.8,.25,1)}
-.vlabel{font-size:11px;color:var(--muted);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;font-weight:600}
-@keyframes vgrow{from{height:0!important}}
+/* ===== لوحة الرسوم البيانية (ApexCharts) ===== */
+.hero-stats{display:grid;grid-template-columns:minmax(250px,340px) 1fr;gap:16px;margin-bottom:18px}
+.hero-stats .panel{display:flex;flex-direction:column;justify-content:center}
+.chart-box{width:100%}
+.chart-note{text-align:center;font-size:12.5px;color:var(--muted);margin-top:2px}
+/* تنسيق ApexCharts للثيم الداكن */
+.apexcharts-canvas{margin:0 auto}
+.apexcharts-tooltip{background:var(--surface-2)!important;border:1px solid var(--border-2)!important;color:var(--text)!important;box-shadow:var(--shadow-sm)!important;border-radius:12px!important}
+.apexcharts-tooltip-title{background:var(--surface-3)!important;border-bottom:1px solid var(--border)!important;font-weight:700!important}
+.apexcharts-legend-text{color:var(--text-2)!important;font-weight:600!important}
+.apexcharts-datalabel-label,.apexcharts-datalabel-value,.apexcharts-text{fill:var(--text-2)!important}
+@media (max-width:760px){.hero-stats{grid-template-columns:1fr}}
 
 /* ===== جداول ===== */
 .tbl-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)}

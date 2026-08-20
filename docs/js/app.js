@@ -223,7 +223,39 @@ function pageOverview() {
     return `<div class="panel"><div class="panel-head"><h2>${UI.esc(title)}</h2></div><div>${rows}</div></div>`;
   };
 
+  // ── تقدّم ذكي (حلقة) + إحصائيات عمودية لتوزيع حالات الحفظ ──
+  const avg = Math.max(0, Math.min(100, Number(s.avg_progress) || 0));
+  const dist = [
+    { lbl: 'نشط', val: s.active_saves, c: 'var(--teal)' },
+    { lbl: 'اختبار', val: s.in_exam, c: 'var(--blue)' },
+    { lbl: 'مكتمل', val: s.finished_saves, c: 'var(--green)' },
+    { lbl: 'موقوف', val: s.suspended_saves, c: 'var(--gold)' },
+    { lbl: 'لم ينضم', val: s.not_joined, c: 'var(--gray)' },
+    { lbl: 'غياب', val: s.with_absence, c: 'var(--red)' },
+  ];
+  const vmax = Math.max(1, ...dist.map(d => Number(d.val) || 0));
+  const vbars = dist.map(d => {
+    const v = Number(d.val) || 0;
+    const h = Math.max(4, Math.round((v / vmax) * 100));
+    return `<div class="vcol">
+      <div class="vnum">${v}</div>
+      <div class="vbar-track"><div class="vbar-fill" style="height:${h}%;background:${d.c}"></div></div>
+      <div class="vlabel">${d.lbl}</div>
+    </div>`;
+  }).join('');
+  const hero = `<div class="hero-stats">
+    <div class="panel ring-panel">
+      <div class="ring" style="--val:${avg}"><div class="ring-in"><div class="ring-val">${avg}%</div><div class="ring-lbl">متوسط التقدّم</div></div></div>
+      <div class="muted" style="font-size:12.5px;text-align:center">${s.students_total} طالب · ${s.active_saves} حفظ نشط</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>توزيع حالات الحفظ</h2></div>
+      <div class="vchart">${vbars}</div>
+    </div>
+  </div>`;
+
   view().innerHTML = `
+    ${hero}
     <div class="cards-grid">${cards}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px">
       ${rankPanel('الأكثر نجاحاً', APP.dash.top_success)}

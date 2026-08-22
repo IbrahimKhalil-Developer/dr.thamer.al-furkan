@@ -469,6 +469,60 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: false });
     }
 
+    /* ── تقديم صفحة يدويًا (محاكاة نظام 11:45 لحفظ واحد) ──────────── */
+    if (action === "advance_page") {
+      const saveId = String(body?.save_id ?? "");
+      if (!saveId) return jsonResponse({ error: true, errors: "save_id مطلوب" }, 400);
+
+      const { data: save } = await supabaseAdmin.from("users_saves").select("*").eq("id", saveId).maybeSingle();
+      if (!save) return jsonResponse({ error: true, errors: "الحفظ غير موجود" }, 404);
+      if (save.status !== "ACTIVE") return jsonResponse({ error: true, errors: "لا يمكن تقديم صفحة إلا لحفظ نشط." }, 400);
+
+      const edp = Math.max(1, Math.ceil(Number(save.every_day_page) || 1));
+
+      // آخر صف في الحفظ
+      const { data: last } = await supabaseAdmin.from("users_pages")
+        .select("*").eq("save_id", saveId).order("id", { ascending: false }).limit(1).maybeSingle();
+      if (!last) return jsonResponse({ error: true, errors: "لا يوجد صف سابق لهذا الحفظ. استخدم «تعديل من الصفر»." }, 400);
+      if (String(last.status ?? "") !== "finished") {
+        return jsonResponse({ error: true, errors: "آخر صف لم يُقيَّم بعد، لا يمكن تقديم صفحة." }, 400);
+      }
+
+      const lastPage = Number(last.page);
+      const success = ["good", "very_good", "perfect"].includes(String(last.page_status ?? ""));
+      // النجاح يتقدّم بمقدار الورد اليومي، والرسوب يبقى على نفس الصفحة (كما في pages_system)
+      const nextPage = success ? lastPage + edp : lastPage;
+      if (success && lastPage >= Number(save.end_page)) {
+        return jsonResponse({ error: true, errors: "تم الوصول لنهاية الحفظ، لا مزيد من الصفحات." }, 400);
+      }
+
+      const disp = buildPageDisplay(nextPage, edp);
+      const tId = save.teacher_id ?? null;
+      const tName = save.teacher_name ?? "";
+      let tPhoto = "";
+      if (tId) {
+        const { data: tRec } = await supabaseAdmin.from("teachers").select("photo_url").eq("teacher_id", tId).maybeSingle();
+        tPhoto = tRec?.photo_url ?? "";
+      }
+
+      await supabaseAdmin.from("users_pages").insert([{
+        user_id: save.user_id, save_id: saveId,
+        teacher_id: tId, teacher_name: tName, teacher_photo: tPhoto,
+        status: "not_ready", page_status: "not_ready",
+        takeem: null, takeem_status: null,
+        errors_number: { sowad: 0, nisyan: 0 },
+        created_at: nowIso(),
+        page: nextPage, page_name: await resolvePageName(nextPage, edp), MePageArabic: disp,
+        date: baghdadDate(1),
+      }]);
+
+      // الصفحة الحالية = صفحة آخر صف ناجح
+      if (success) await supabaseAdmin.from("users_saves").update({ page_current: lastPage }).eq("id", saveId);
+
+      await writeLog(A, `قدّم صفحة يدويًا لحفظ (${save.name ?? ""}) — أضاف صف (${disp}) بحالة "لم يُقيَّم".`);
+      return jsonResponse({ error: false, page: nextPage, page_display: disp });
+    }
+
     /* ── تعيين كلمة المرور (+ system_key) ───────────────────────── */
     if (action === "set_password") {
       const kind = String(body?.kind ?? "student");

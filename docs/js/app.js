@@ -483,6 +483,7 @@ function saveBlock(s) {
       <div class="progress-bar" style="flex:1;min-width:160px"><div style="width:${s.progress_pct}%"></div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" onclick="openEditSaveModal('${sid}')">${icon('edit', 13)} تعديل</button>
+        ${s.status === 'ACTIVE' ? `<button class="btn btn-ghost btn-sm" onclick="advancePage('${sid}', event)">${icon('plus', 13)} تقديم صفحة</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="openRebuildSaveModal('${sid}')">${icon('edit', 13)} تعديل من الصفر</button>
         <button class="btn btn-ghost btn-sm" onclick="openExamControlModal('${sid}','EXAM1')">${icon('exam', 13)} الاختبار الجزئي</button>
         <button class="btn btn-ghost btn-sm" onclick="openExamControlModal('${sid}','EXAM2')">${icon('exam', 13)} الاختبار التراكمي</button>
@@ -694,6 +695,15 @@ function openEditSaveModal(saveId) {
     await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'update_save', save_id: s.id, fields, notify_target, notify_student }),
       { okMsg: 'تم حفظ بيانات الحفظ', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
   };
+}
+
+async function advancePage(saveId, ev) {
+  const s = APP.current.saves.find(x => String(x.id) === String(saveId)); if (!s) return;
+  if (!confirm('سيُضاف الصف التالي بناءً على تقييم آخر صفحة (كما في نظام 11:45) بحالة «لم يُقيَّم». متابعة؟')) return;
+  await runAction(ev.currentTarget, () => TW.call('testweb_mutate', { action: 'advance_page', save_id: s.id }), {
+    okMsg: 'تمت إضافة الصف التالي', refreshDash: false,
+    after: () => pageStudentDetail(APP.current.user.user_id),
+  });
 }
 
 function openRebuildSaveModal(saveId) {

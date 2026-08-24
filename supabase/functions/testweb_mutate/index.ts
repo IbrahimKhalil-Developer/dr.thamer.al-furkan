@@ -646,8 +646,10 @@ Deno.serve(async (req: Request) => {
         const isSuccess = (st: string, ps: string) =>
           st === "finished" && (ps === "good" || ps === "very_good" || ps === "perfect");
 
-        // أعد بناء التقدم حتى الصف المعدّل باستخدام قيمته الجديدة
-        let lastSuccessPage = startPage - edpStep;
+        // أعد بناء التقدم حتى الصف المعدّل باستخدام قيمته الجديدة.
+        // عمود page = آخر صفحة في نطاق اليوم؛ أول صف ناجح = start_page + edp - 1،
+        // لذا نبدأ من (start_page - 1) ثم نضيف edp لكل صف ناجح (يصح لأي عدد صفحات يومي).
+        let lastSuccessPage = startPage - 1;
         for (let i = 0; i <= idx; i++) {
           const r = orderedRows[i];
           const st = i === idx ? (state === "finished" ? "finished" : state) : String(r.status ?? "");

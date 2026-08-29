@@ -251,6 +251,12 @@ Deno.serve(async (req: Request) => {
       const patch: Record<string, any> = {};
       const notes: string[] = [];
 
+      // اسم الحفظ (معلومات عامة) — الإشعار اختياري، ويُسجَّل التغيير في سجل العمليات
+      if (f.save_name != null && String(f.save_name).trim() !== "" && String(f.save_name).trim() !== String(save.name ?? "")) {
+        patch.name = String(f.save_name).trim();
+        notes.push(`اسم الحفظ: "${save.name ?? ""}" ← "${patch.name}"`);
+      }
+
       // صفحة البداية (قابلة للتعديل) — لا تُرسل أي إشعار للطالب عند تعديلها
       let effStart = Number(save.start_page);
       if (f.start_page != null && f.start_page !== "") {
@@ -407,9 +413,12 @@ Deno.serve(async (req: Request) => {
         if (notifyStudentEdit && stu?.user_phone_number) {
           await sendWaha(stu.user_phone_number, msgTodayRowStudent(save.name ?? "", stu.full_name ?? "", String(sg ?? "male"), rebuildDisp, toLocalPhone(stu.user_phone_number)));
         }
-      } else if (notifyStudentEdit && patch.end_page != null && stu?.user_phone_number) {
-        // إشعار تعديل نهاية الحفظ (عند تفعيل الخيار فقط)
-        const txt = `تم تعديل نهاية ${g(sg, "حفظكَ", "حفظكِ")} (*${save.name}*) إلى الصفحة *${patch.end_page}*.`;
+      } else if (notifyStudentEdit && stu?.user_phone_number && (patch.name != null || patch.end_page != null)) {
+        // إشعار تعديل المعلومات العامة (الاسم/النهاية) — عند تفعيل الخيار فقط
+        const lines: string[] = [];
+        if (patch.name != null) lines.push(`اسم الحفظ: *${patch.name}*`);
+        if (patch.end_page != null) lines.push(`نهاية الحفظ: الصفحة *${patch.end_page}*`);
+        const txt = `تم تعديل معلومات ${g(sg, "حفظكَ", "حفظكِ")}:\n${lines.join("\n")}`;
         await sendWaha(stu.user_phone_number, wrapMsg(A, txt));
       }
 

@@ -485,6 +485,7 @@ function saveBlock(s) {
         <button class="btn btn-ghost btn-sm" onclick="openEditSaveModal('${sid}')">${icon('edit', 13)} تعديل</button>
         ${s.status === 'ACTIVE' ? `<button class="btn btn-ghost btn-sm" onclick="advancePage('${sid}', event)">${icon('plus', 13)} تقديم صفحة</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="openRebuildSaveModal('${sid}')">${icon('edit', 13)} تعديل من الصفر</button>
+        <button class="btn btn-ghost btn-sm" onclick="openRestartSaveModal('${sid}')">${icon('refresh', 13)} إعادة الحفظ</button>
         <button class="btn btn-ghost btn-sm" onclick="openExamControlModal('${sid}','EXAM1')">${icon('exam', 13)} الاختبار الجزئي</button>
         <button class="btn btn-ghost btn-sm" onclick="openExamControlModal('${sid}','EXAM2')">${icon('exam', 13)} الاختبار التراكمي</button>
       </div>
@@ -697,6 +698,30 @@ function openEditSaveModal(saveId) {
     if (String(f.page_current) !== String(s.page_current ?? '')) fields.page_current = f.page_current;
     await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'update_save', save_id: s.id, fields, notify_target, notify_student }),
       { okMsg: 'تم حفظ بيانات الحفظ', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
+  };
+}
+
+function openRestartSaveModal(saveId) {
+  const s = APP.current.saves.find(x => String(x.id) === String(saveId)); if (!s) return;
+  const tOpts = [['', '—']].concat(teacherOptions());
+  const body = `<p class="muted" style="margin-bottom:14px">سيُنشأ حفظ جديد بنفس تفاصيل الحفظ الحالي: من صفحة <b>${UI.esc(s.start_page)}</b> إلى <b>${UI.esc(s.end_page)}</b>، الورد اليومي <b>${UI.esc(s.every_day_page)}</b>. يُنهى الحفظ الحالي ويُبلَّغ الطالب والمشرف بإعادة الحفظ.</p>
+    <div class="form-grid">
+      ${fieldHtml('اسم الحفظ الجديد', 'save_name', s.name)}
+      ${selectHtml('المشرف', 'teacher_id', s.teacher_id, tOpts)}
+    </div>`;
+  const foot = `<button class="btn btn-primary" id="md-ok">إضافة</button><button class="btn btn-ghost" id="md-cancel">إلغاء</button>`;
+  const m = UI.modal('إعادة الحفظ', body, foot);
+  m.el.querySelector('#md-cancel').onclick = m.close;
+  m.el.querySelector('#md-ok').onclick = async ev => {
+    const f = collectFields(m.el);
+    if (!f.save_name || !f.teacher_id) { UI.toast('اسم الحفظ والمشرف مطلوبان', 'err'); return; }
+    const fields = {
+      save_name: f.save_name, teacher_id: f.teacher_id,
+      start_page: s.start_page, end_page: s.end_page, every_day_page: s.every_day_page,
+      evaluate_today: 'false', exam1: 'false', exam2: 'false',
+    };
+    await runAction(ev.target, () => TW.call('testweb_mutate', { action: 'add_save', user_id: APP.current.user.user_id, replace_save_id: s.id, fields, notify_target: 'both' }),
+      { okMsg: 'تمت إعادة الحفظ', modal: m, after: () => pageStudentDetail(APP.current.user.user_id) });
   };
 }
 
